@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Drakoria — D3-SAFE</title>
+<title>Drakoria — D3-SAFE-HUD1</title>
 <style>
 :root{
   --bg:#0b1224; --panel:#0f172a; --stroke:#1f2a44; --text:#e5e7eb; --muted:#9ca3af;
@@ -22,9 +22,11 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 .help .coin{color:var(--coin);font-weight:700}
 .help .potion{color:#a78bfa;font-weight:700}
 #status{margin-top:8px;color:var(--muted)}
+/* Floating buttons */
 .fab{position:fixed;bottom:14px;width:56px;height:56px;border-radius:50%;border:1px solid #31406e;background:var(--accent);color:#fff;font-size:24px;line-height:56px;text-align:center;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:20}
 #btnUsePotion{ right:14px }   /* 🍵 */
 #btnAttack{ right:82px }      /* 🗡️ */
+#atkCdCanvas{ position:fixed; right:82px; bottom:14px; width:56px; height:56px; z-index:21; pointer-events:none }
 .err{
   position:fixed;left:50%;top:70px;transform:translateX(-50%);
   background:#7f1d1d;color:#fff;border:1px solid #fecaca;border-radius:8px;
@@ -52,207 +54,5 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 </main>
 
 <button id="btnAttack" class="fab" aria-label="Attacca">🗡️</button>
-<button id="btnUsePotion" class="fab" aria-label="Usa pozione">🍵</button>
-
-<div id="errBox" class="err" style="display:none"></div>
-
-<script>
-/* ===== Drakoria — BUILD D3-SAFE ===== */
-(function(){
-  const BUILD='D3-SAFE';
-  const SAVE_KEY='barebones_save_safe';
-  const cv=document.getElementById('game'); const ctx=cv.getContext('2d');
-  const statusEl=document.getElementById('status');
-  const btnAttack=document.getElementById('btnAttack'), btnUsePotion=document.getElementById('btnUsePotion');
-  const btnSave=document.getElementById('btnSave'), btnLoad=document.getElementById('btnLoad'), btnReset=document.getElementById('btnReset');
-  const errBox=document.getElementById('errBox');
-
-  function panic(where, e){
-    errBox.style.display='block';
-    errBox.textContent='ERRORE '+where+': '+(e && (e.message||e));
-    console.error('[PANIC]', where, e);
-  }
-
-  try{
-    // --- MAPPA
-    const COLS=15, ROWS=9, TILE=64;
-    const map=Array.from({length:ROWS},()=>Array(COLS).fill(0));
-    for(let i=0;i<16;i++){ const x=(Math.random()*COLS|0), y=(Math.random()*ROWS|0); if((x===1&&y===1)||(x===COLS-2&&y===ROWS-2)) continue; map[y][x]=1; }
-
-    // --- PLAYER / ENEMY / ITEMS
-    const player={x:1,y:1,hp:100,maxHp:100,coins:0,pots:1,atkMin:6,atkMax:12,lastAtk:0,atkCd:400};
-    const enemies=[{type:'melee',x:COLS-2,y:ROWS-2,hp:60,maxHp:60,lastHit:0,hitCd:800,atkMin:5,atkMax:9,mode:'patrol',tick:0}];
-    const coins=[], potions=[], projectiles=[];
-    for(let i=0;i<5;i++) coins.push(randEmpty());
-    for(let i=0;i<1;i++) potions.push(randEmpty());
-
-    // --- UTILS
-    const inside=(x,y)=>x>=0&&y>=0&&x<COLS&&y<ROWS;
-    const walkable=(x,y)=>inside(x,y)&&map[y][x]===0;
-    const manhattan=(a,b)=>Math.abs(a.x-b.x)+Math.abs(a.y-b.y);
-    const chebyshev=(a,b)=>Math.max(Math.abs(a.x-b.x),Math.abs(a.y-b.y));
-    const rndInt=(a,b)=>a+(Math.random()*(b-a+1)|0);
-    const getVar=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-
-    function randEmpty(){
-      for(let k=0;k<500;k++){
-        const x=(Math.random()*COLS|0), y=(Math.random()*ROWS|0);
-        const occ=(x===player.x&&y===player.y)||enemies.some(e=>e.x===x&&e.y===y)||coins.some(c=>c.x===x&&c.y===y)||potions.some(p=>p.x===x&&p.y===y);
-        if(map[y][x]===0 && !occ) return {x,y};
-      } return {x:2,y:2};
-    }
-
-    // --- PATHFIND (BFS)
-    function bfs(sx,sy,tx,ty){
-      if(!walkable(tx,ty)) return null;
-      const q=[{x:sx,y:sy}], prev=new Map(), seen=new Set([sx+','+sy]);
-      const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
-      while(q.length){
-        const c=q.shift();
-        if(c.x===tx&&c.y===ty){
-          const path=[]; let k=tx+','+ty;
-          while(prev.has(k)){ const p=prev.get(k), s=k.split(','); path.push({x:+s[0],y:+s[1]}); k=p.x+','+p.y; }
-          return path.reverse();
-        }
-        for(const d of dirs){
-          const nx=c.x+d[0], ny=c.y+d[1], kk=nx+','+ny;
-          if(!walkable(nx,ny)||seen.has(kk)) continue;
-          seen.add(kk); prev.set(kk,c); q.push({x:nx,y:ny});
-        }
-      }
-      return null;
-    }
-
-    // --- INPUT
-    let pathQueue=[], lastTapTs=0;
-    function canvasToTile(ev){
-      const r=cv.getBoundingClientRect();
-      const cx=(ev.clientX??ev.touches?.[0]?.clientX), cy=(ev.clientY??ev.touches?.[0]?.clientY);
-      const sx=(cx-r.left)*(cv.width/r.width), sy=(cy-r.top)*(cv.height/r.height);
-      return {sx,sy,tx:Math.max(0,Math.min(COLS-1,(sx/64)|0)), ty:Math.max(0,Math.min(ROWS-1,(sy/64)|0))};
-    }
-    function enemyRect(e){ const x=e.x*64+32-16, y=e.y*64+32-22; return {x,y,w:32,h:36}; }
-    function inRect(px,py,r){ return px>=r.x&&px<=r.x+r.w&&py>=r.y&&py<=r.y+r.h; }
-
-    cv.addEventListener('click',ev=>{
-      const m=canvasToTile(ev), now=performance.now(), cd=(now-player.lastAtk)>=player.atkCd;
-      const adj=enemies.find(e=>chebyshev(player,e)===1 && inRect(m.sx,m.sy,enemyRect(e)));
-      if(adj && cd) return attackEnemy(adj);
-      if(cd){ const onTile=enemies.find(e=>chebyshev(player,e)===1 && e.x===m.tx && e.y===m.ty); if(onTile) return attackEnemy(onTile); }
-      const p=bfs(player.x,player.y,m.tx,m.ty); if(p&&p.length) pathQueue=p;
-    });
-    cv.addEventListener('pointerdown',()=>{
-      const now=performance.now();
-      if(now-lastTapTs<=300){ usePotion(); lastTapTs=0; } else lastTapTs=now;
-    });
-    function tryAttackAdjacent(){
-      const now=performance.now(); if(now-player.lastAtk<player.atkCd) return false;
-      const adj=enemies.find(en=>chebyshev(player,en)===1);
-      if(adj){ attackEnemy(adj); return true; }
-      return false;
-    }
-    btnAttack.onclick=tryAttackAdjacent;
-    btnAttack.addEventListener('touchend',e=>{e.preventDefault();tryAttackAdjacent();},{passive:false});
-    window.addEventListener('keydown',e=>{ if(e.code==='Space'||e.key===' ') tryAttackAdjacent(); if(e.key==='e'||e.key==='E') usePotion(); });
-
-    btnUsePotion.onclick=usePotion;
-    btnUsePotion.addEventListener('touchend',e=>{e.preventDefault();usePotion();},{passive:false});
-
-    // --- COMBAT / INTERAZIONI
-    function attackEnemy(t){
-      const now=performance.now(); player.lastAtk=now;
-      const dmg=rndInt(player.atkMin,player.atkMax);
-      t.hp=Math.max(0,t.hp-dmg); flashCircle(t.x,t.y,'#ff0000',.25,26);
-      if(t.hp===0){ enemies.splice(enemies.indexOf(t),1); coins.push({x:t.x,y:t.y}); }
-      draw();
-    }
-    function usePotion(){ if(player.pots<=0||player.hp>=player.maxHp) return; player.pots--; player.hp=Math.min(player.maxHp,player.hp+35); flashScreen('#8b5cf6'); draw(); }
-    function gameOver(){ alert('Sei stato sconfitto! Respawn al punto iniziale.'); player.hp=player.maxHp; player.x=1; player.y=1; }
-
-    // --- SAVE/LOAD/RESET
-    btnSave.onclick=()=>{ try{ localStorage.setItem(SAVE_KEY, JSON.stringify({map,player,enemies,coins,potions})); toast('Salvato.'); }catch(e){ panic('save',e); } };
-    btnLoad.onclick=()=>{ try{
-      const raw=localStorage.getItem(SAVE_KEY); if(!raw) return alert('Nessun salvataggio.');
-      const d=JSON.parse(raw);
-      if(d?.map?.length===ROWS){ for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++) map[y][x]=d.map[y][x]|0; }
-      Object.assign(player,d.player||{});
-      enemies.length=0; (d.enemies||[]).forEach(e=>enemies.push(e));
-      coins.length=0; (d.coins||[]).forEach(c=>coins.push(c));
-      potions.length=0; (d.potions||[]).forEach(p=>potions.push(p));
-      toast('Caricato.'); draw();
-    }catch(e){ panic('load',e); } };
-    btnReset.onclick=()=>{ location.reload(); };
-
-    // --- LOOP
-    function step(){
-      try{
-        // path
-        if(pathQueue.length){
-          const next=pathQueue.shift();
-          if(walkable(next.x,next.y) && !enemies.some(e=>e.x===next.x&&e.y===next.y)){ player.x=next.x; player.y=next.y; } else pathQueue=[];
-        }
-        // contatto nemico
-        const now=performance.now();
-        for(const e of enemies){
-          if(manhattan(e,player)<=1 && (now-e.lastHit)>=e.hitCd){
-            e.lastHit=now; const dmg=rndInt(e.atkMin,e.atkMax);
-            player.hp=Math.max(0,player.hp-dmg); flashCircle(player.x,player.y,'#ff0000',.25,26); if(player.hp===0) gameOver();
-          }
-        }
-        // pick up
-        for(let i=coins.length-1;i>=0;i--) if(coins[i].x===player.x&&coins[i].y===player.y){ coins.splice(i,1); player.coins++; }
-        for(let i=potions.length-1;i>=0;i--) if(potions[i].x===player.x&&potions[i].y===player.y){ potions.splice(i,1); player.pots++; }
-        draw();
-      }catch(e){ panic('loop',e); }
-    }
-    setInterval(step,120);
-    draw();
-
-    // --- DRAW
-    function draw(){
-      ctx.clearRect(0,0,cv.width,cv.height);
-      // tiles
-      for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
-        ctx.fillStyle = (map[y][x]===1)?getVar('--block'):((x+y)%2===0?getVar('--tileA'):getVar('--tileB'));
-        ctx.fillRect(x*64,y*64,64,64);
-      }
-      // coins
-      ctx.fillStyle=getVar('--coin');
-      for(const c of coins){ const cx=c.x*64+32, cy=c.y*64+32; ctx.beginPath(); ctx.arc(cx,cy,10,0,Math.PI*2); ctx.fill(); }
-      // potions
-      for(const p of potions){ const x=p.x*64,y=p.y*64;
-        ctx.fillStyle='#8b5cf6'; ctx.fillRect(x+32-8,y+32-14,16,20);
-        ctx.fillStyle='#a78bfa'; ctx.fillRect(x+32-5,y+32-20,10,6);
-        ctx.fillStyle='#6d28d9'; ctx.fillRect(x+32-6,y+32-24,12,4);
-        ctx.fillStyle='#0006'; ctx.beginPath(); ctx.ellipse(x+32,y+64-12,12,4,0,0,Math.PI*2); ctx.fill();
-      }
-      // enemies
-      for(const e of enemies){ drawActor(e.x,e.y,getVar('--enemy')); drawHpBar(e.x,e.y,e.hp,e.maxHp); }
-      // player
-      drawActor(player.x,player.y,getVar('--player')); drawHpBar(player.x,player.y,player.hp,player.maxHp);
-      // status
-      statusEl.textContent = `build: ${BUILD} | HP ${player.hp}/${player.maxHp} | coins ${player.coins} | pots ${player.pots}`;
-      // build tag
-      ctx.fillStyle='#ffffffcc'; ctx.font='bold 14px system-ui'; ctx.fillText('BUILD '+BUILD, 8, 24);
-    }
-
-    function drawActor(tx,ty,color){
-      const x=tx*64, y=ty*64;
-      ctx.fillStyle=getVar('--shadow'); ctx.beginPath(); ctx.ellipse(x+32,y+64-12,18,6,0,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle=color; ctx.fillRect(x+32-16,y+32-22,32,36);
-    }
-    function drawHpBar(tx,ty,hp,maxHp){
-      const x=tx*64, y=ty*64, w=40, h=6, px=x+32-w/2, py=y+32-32;
-      const r=Math.max(0,Math.min(1,hp/maxHp));
-      ctx.fillStyle=getVar('--hpBack'); ctx.fillRect(px,py,w,h);
-      ctx.fillStyle=getVar('--hp'); ctx.fillRect(px,py,w*r,h);
-      ctx.strokeStyle='#0008'; ctx.strokeRect(px,py,w,h);
-    }
-    function flashScreen(color){ ctx.save(); ctx.globalAlpha=.20; ctx.fillStyle=color; ctx.fillRect(0,0,cv.width,cv.height); ctx.restore(); }
-    function flashCircle(tx,ty,color,alpha,r){ const x=tx*64+32,y=ty*64+32; ctx.save(); ctx.globalAlpha=alpha; ctx.fillStyle=color; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); ctx.restore(); }
-
-  }catch(e){ panic('boot', e); }
-})();
-</script>
-</body>
-</html>
+<canvas id="atkCdCanvas" width="56" height="56" aria-hidden="true"></canvas>
+<button id="btnUsePotion" class="fab" aria-label="Usa pozione">🍵</
