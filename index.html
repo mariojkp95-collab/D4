@@ -603,38 +603,28 @@ if (WORLD.current === 'main') {
     btnQuestClose.addEventListener('click', function(){ questPanel.classList.add('hidden'); }, false);
     renderQuest();
 
-    // UTILS
-    function inside(x,y){ return x>=0&&y>=0&&x<COLS&&y<ROWS; }
-    function -    function walkable(x,y){ return inside(x,y)&&map[y][x]===0; }
-+    function walkable(x,y){
-+      if (!inside(x,y)) return false;
-+      if (map[y][x]!==0) return false;
-+      if (isPortalTile(WORLD.current, x, y)) return false;
-+      return true;
-+    }
-    function chebyshev(a,b){ var dx=Math.abs(a.x-b.x), dy=Math.abs(a.y-b.y); return dx>dy?dx:dy; }
-    function rndInt(a,b){ return a+((Math.random()*(b-a+1))|0); }
-    function getVar(n){ var cs = window.getComputedStyle(document.documentElement); return cs.getPropertyValue(n).trim(); }
-    function rollCrit(chance){ return Math.random() < (chance||0); }
+// UTILS
+function inside(x,y){ return x>=0&&y>=0&&x<COLS&&y<ROWS; }
 
-   -    function tileFree(x,y){
--      if(map[y][x]!==0) return false;
--      var i;
--      if(x===player.x && y===player.y) return false;
--      for(i=0;i<enemies.length;i++){ if(enemies[i].x===x && enemies[i].y===y) return false; }
--      for(i=0;i<coins.length;i++){ if(coins[i].x===x && coins[i].y===y) return false; }
--      for(i=0;i<potions.length;i++){ if(potions[i].x===x && potions[i].y===y) return false; }
--      if(Array.isArray(lootBags)){ for(i=0;i<lootBags.length;i++){ if(lootBags[i].x===x && lootBags[i].y===y) return false; } }
--      return true;
--    }
-+    function tileFree(x,y){
-+      if(map[y][x]!==0) return false;
-+      if(x===player.x && y===player.y) return false;
-+      for(var i=0;i<enemies.length;i++){ if(enemies[i].x===x && enemies[i].y===y) return false; }
-+      // gli oggetti a terra non bloccano
-+      return true;
-+    }
-    function randEmpty(){ for(var k=0;k<500;k++){ var x=(Math.random()*COLS|0), y=(Math.random()*ROWS|0); if(inside(x,y) && tileFree(x,y)) return {x:x,y:y}; } return {x:2,y:2}; }
+function walkable(x,y){
+  if (!inside(x,y)) return false;
+  if (map[y][x]!==0) return false;
+  if (isPortalTile(WORLD.current, x, y)) return false;
+  return true;
+}
+
+function chebyshev(a,b){ var dx=Math.abs(a.x-b.x), dy=Math.abs(a.y-b.y); return dx>dy?dx:dy; }
+function rndInt(a,b){ return a+((Math.random()*(b-a+1))|0); }
+function getVar(n){ var cs = window.getComputedStyle(document.documentElement); return cs.getPropertyValue(n).trim(); }
+function rollCrit(chance){ return Math.random() < (chance||0); }
+
+function tileFree(x,y){
+  if(map[y][x]!==0) return false;
+  if(x===player.x && y===player.y) return false;
+  for(var i=0;i<enemies.length;i++){ if(enemies[i].x===x && enemies[i].y===y) return false; }
+  // gli oggetti a terra non bloccano
+  return true;
+}
 
     // PATHFIND + helpers (brevi)
     function bfs(sx,sy,tx,ty){
@@ -792,16 +782,9 @@ if (WORLD.current === 'main') {
       flashCircle(player.x,player.y, '#ff0000', 0.25, 26);
       logDmg('Subisci '+amount+' danni.');
       if(isCasting) cancelCast('Interrotto dal danno');
-      if(player.hp===0) -    function gameOver(){ alert('Sei stato sconfitto! Respawn al punto iniziale (niente perdita XP/livello).'); player.hp=player.maxHp; player.x=1; player.y=1; autoChase=false; }
-+    function gameOver(){
-+      toast('Sei stato sconfitto! Respawn tra un attimo…');
-+      setTimeout(function(){
-+        player.hp=player.maxHp;
-+        player.x=1; player.y=1;
-+        autoChase=false; pathQueue=[];
-+        draw(); drawMini(); updateTargetFrame();
-+      }, 600);
-+    }
+      if (player.hp===0) gameOver();
+      { alert('Sei stato sconfitto! Respawn al punto iniziale (niente perdita XP/livello).'); player.hp=player.maxHp; player.x=1; player.y=1; autoChase=false; }
+
 
     function usePotion(){
       if(player.pots<=0||player.hp>=player.maxHp) return;
@@ -831,7 +814,15 @@ if (WORLD.current === 'main') {
       for(var s=1;s<=5;s++){ var b=hotbar[s]; if(b && b.kind==='item' && b.itemId===itemId){ hotbar[s]=null; capEls[s].textContent='—'; } }
     }
 
-    function gameOver(){ alert('Sei stato sconfitto! Respawn al punto iniziale (niente perdita XP/livello).'); player.hp=player.maxHp; player.x=1; player.y=1; autoChase=false; }
+    function gameOver(){
+  toast('Sei stato sconfitto! Respawn tra un attimo…');
+  setTimeout(function(){
+    player.hp=player.maxHp;
+    player.x=1; player.y=1;
+    autoChase=false; pathQueue=[];
+    draw(); drawMini(); updateTargetFrame();
+  }, 600);
+}
 
     function hasLoS(ax,ay,bx,by){
       if(ax===bx){ var step=(ay<by)?1:-1; for(var y=ay+step; y!==by; y+=step){ if(map[y][ax]===1) return false; } return true; }
@@ -952,14 +943,44 @@ if (WORLD.current === 'main') {
 +      if (bag) { lootSuppress = { id:bagKey(bag), until: performance.now()+2000 }; }
 +      lootWin.classList.add('hidden');
 +    }, false);
-    lootTakeAll.addEventListener('click', function(){
-      var bag=getBagAt(player.x,player.y); if(!bag) return;
-      while(bag.items.length){ applyItem(bag.items.shift()); }
-      lootBags.splice(lootBags.indexOf(bag),1);
-      lootWin.classList.add('hidden');
-      btnLoot.style.display='none';
-      draw(); drawMini(); updateHotbarCounts();
-    }, false);
+    lootTakeAll.addEventListener('click', 
+    function(){
+      function openLootIfAny(){
+  var bag = getBagAt(player.x, player.y);
+  if(!bag) { btnLoot.style.display='none'; return; }
+
+  var key = bagKey(bag);
+  if (lootSuppress.id === key && performance.now() < lootSuppress.until) {
+    btnLoot.style.display='block'; // mostra solo il pulsante, niente auto-popup
+    return;
+  }
+
+  btnLoot.style.display='block';
+
+  var commonOnly = true;
+  for (var i = 0; i < bag.items.length; i++) {
+    var t = bag.items[i].type;
+    if (t !== 'coin' && t !== 'potion') { commonOnly = false; break; }
+  }
+
+  if (commonOnly) {
+    var beforeCoins = player.coins, beforePots = player.pots;
+    var emptied = autoPickupCommons(bag);
+    var coinsGained = player.coins - beforeCoins;
+    var potsGained  = player.pots  - beforePots;
+    if (emptied) { lootBags.splice(lootBags.indexOf(bag),1); btnLoot.style.display='none'; }
+    else { renderLoot(bag); lootWin.classList.remove('hidden'); }
+    updateHotbarCounts(); draw(); drawMini();
+    if (coinsGained || potsGained) {
+      toast('Raccolto: ' + (coinsGained?('🪙 x'+coinsGained+' '):'') + (potsGained?('🍵 x'+potsGained):''));
+      if(coinsGained) logLoot('Monete +' + coinsGained);
+      if(potsGained)  logLoot('Pozioni +' + potsGained);
+    }
+    return;
+  }
+
+  renderLoot(bag); lootWin.classList.remove('hidden');
+}
 
     // INVENTARIO UI
     function applyItem(it){
@@ -1143,28 +1164,22 @@ if (WORLD.current === 'main') {
 
     // SAVE/LOAD/RESET
     btnSave.addEventListener('click', function(){
-      try{
-        var now=performance.now();
-        var bags=lootBags.map(function(b){
-          var remain=Math.max(0, b.ttlMs - (now - b.createdAt));
-          return {x:b.x,y:b.y,items:b.items, ttlRemain:remain};
-        });
-        localStorage.setItem(SAVE_KEY, JSON.stringify({
-          -        localStorage.setItem(SAVE_KEY, JSON.stringify({
--          map:map, player:player, enemies:enemies, coins:coins, potions:potions, projectiles:projectiles,
--          lootBags:bags, nextItemId:nextItemId, inventory:inventory, equipped:equipped,
--          lastCast:lastCast, hotbar:hotbar
--        }));
-+        localStorage.setItem(SAVE_KEY, JSON.stringify({
-+          map:map, player:player, enemies:enemies, coins:coins, potions:potions, projectiles:projectiles,
-+          lootBags:bags, nextItemId:nextItemId, inventory:inventory, equipped:equipped,
-+          lastCast:lastCast, hotbar:hotbar,
-+          world: WORLD.current
-+        }));
-        localStorage.setItem(QUEST_KEY, JSON.stringify({currentQuest:currentQuest,quests:quests}));
-        toast('Salvato.');
-      }catch(e){ panic('save',e); }
-    }, false);
+  try{
+    var now=performance.now();
+    var bags=lootBags.map(function(b){
+      var remain=Math.max(0, b.ttlMs - (now - b.createdAt));
+      return {x:b.x,y:b.y,items:b.items, ttlRemain:remain};
+    });
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      map:map, player:player, enemies:enemies, coins:coins, potions:potions, projectiles:projectiles,
+      lootBags:bags, nextItemId:nextItemId, inventory:inventory, equipped:equipped,
+      lastCast:lastCast, hotbar:hotbar,
+      world: WORLD.current
+    }));
+    localStorage.setItem(QUEST_KEY, JSON.stringify({currentQuest:currentQuest,quests:quests}));
+    toast('Salvato.');
+  }catch(e){ panic('save',e); }
+}, false);
 
     btnLoad.addEventListener('click', function(){ try{
       var raw=localStorage.getItem(SAVE_KEY); if(!raw) return alert('Nessun salvataggio.');
@@ -1187,11 +1202,11 @@ if (WORLD.current === 'main') {
       equipped = d && d.equipped ? d.equipped : {weapon:null, armor:null};
       lastCast = d && d.lastCast ? d.lastCast : {};
       if(d && d.hotbar){ hotbar=d.hotbar; for(var s=1;s<=5;s++){ capEls[s].textContent = hotbar[s] ? (hotbar[s].icon||'—') : '—'; } }
-      +      // Ripristina mondo e tema se salvati
-+      if (d && d.world) {
-+        WORLD.current = d.world;
-+        applyTheme(WORLD.current==='main' ? THEMES.main : THEMES.spawn);
-+      }
+      // Ripristina mondo e tema se salvati
+if (d && d.world) {
+  WORLD.current = d.world;
+  applyTheme(WORLD.current==='main' ? THEMES.main : THEMES.spawn);
+}
       recomputeStats(false);
       var qd = localStorage.getItem(QUEST_KEY); if(qd){ var qj=JSON.parse(qd); if(qj){ currentQuest=qj.currentQuest||0; if(qj.quests&&qj.quests.length){ quests[0].progress=qj.quests[0].progress||0; quests[0].status=qj.quests[0].status||'active'; } } }
       renderQuest(); updateHotbarCounts(); draw(); drawMini(); renderInventoryIfOpen(); updateTargetFrame(); updateDpsPanel(); renderAbilities();
