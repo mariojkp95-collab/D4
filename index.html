@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Drakoria — HUD-1</title>
+<title>Drakoria — HUD-2</title>
 <style>
 :root{
   --bg:#0b1224; --panel:#0f172a; --stroke:#1f2a44; --text:#e5e7eb; --muted:#9ca3af;
@@ -24,6 +24,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 #btnUsePotion{ right:14px }
 #btnAttack{ right:82px }
 #btnLoot{ right:150px; display:none }
+#btnCast{ right:218px }
 #atkCdCanvas{ position:fixed; right:82px; bottom:14px; width:56px; height:56px; z-index:21; pointer-events:none }
 .err{position:fixed;left:50%;top:70px;transform:translateX(-50%);background:#7f1d1d;color:#fff;border:1px solid #fecaca;border-radius:8px;padding:8px 12px;z-index:50;font-weight:600;max-width:90vw;white-space:pre-wrap}
 
@@ -102,6 +103,25 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 .dps{position:fixed; left:16px; top:16px; background:rgba(15,23,42,.9); border:1px solid #1f2a44; border-radius:10px; padding:8px 10px; z-index:26}
 .dps .h{font-weight:700; margin-bottom:4px}
 .dps .v{color:#e5e7eb}
+
+/* Cast bar */
+.cast{position:fixed; left:50%; bottom:148px; transform:translateX(-50%); width:60vw; max-width:560px; min-width:220px;
+  background:rgba(15,23,42,.9); border:1px solid #1f2a44; border-radius:10px; padding:8px 10px; z-index:26; display:none}
+.cast .row{display:flex; justify-content:space-between; align-items:center; margin-bottom:6px}
+.cast .name{font-weight:700}
+.cast .bar{height:10px; background:#0b1224; border:1px solid #1f2a44; border-radius:6px; overflow:hidden}
+.cast .bar>div{height:100%; width:0%; background:#60a5fa}
+
+/* Combat log */
+.log{position:fixed; left:16px; bottom:16px; width:320px; max-width:80vw;
+  background:rgba(15,23,42,.9); border:1px solid #1f2a44; border-radius:10px; padding:8px 10px; z-index:26}
+.log .h{display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-weight:700}
+.log .b{max-height:180px; overflow:auto; font:12px/1.3 system-ui}
+.log .line{margin:2px 0}
+.log .dmg{color:#fca5a5}
+.log .heal{color:#86efac}
+.log .loot{color:#fde68a}
+.log .sys{color:#93c5fd}
 </style>
 </head>
 <body>
@@ -111,6 +131,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     <button id="btnQuest">Quest</button>
     <button id="btnMini">Mini-mappa</button>
     <button id="btnInventory">Inventario</button>
+    <button id="btnLog">Log</button>
     <button id="btnSave">Save</button>
     <button id="btnLoad">Load</button>
     <button id="btnReset">Reset</button>
@@ -121,16 +142,23 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   <canvas id="game" width="960" height="576" aria-label="Gioco"></canvas>
   <p class="help">
     Tap per muoverti • tap su un <b>nemico</b> per selezionarlo (Target Frame) • <b>doppio tap</b> per <b>auto-inseguire</b> •
-    <b>🗡️</b> / SPAZIO attacca • Entra su un <b>sacco</b> per loot.
+    <b>🗡️</b> / SPAZIO attacca • <b>✨</b> abilità con cast • Entra su un <b>sacco</b> per loot.
   </p>
   <div id="status"></div>
 </main>
 
 <!-- HUD buttons -->
+<button id="btnCast" class="fab" aria-label="Lancia abilità">✨</button>
 <button id="btnAttack" class="fab" aria-label="Attacca">🗡️</button>
 <canvas id="atkCdCanvas" width="56" height="56" aria-hidden="true"></canvas>
 <button id="btnUsePotion" class="fab" aria-label="Usa pozione">🍵</button>
 <button id="btnLoot" class="fab" aria-label="Apri loot">👜</button>
+
+<!-- Cast bar -->
+<div id="castWrap" class="cast" aria-live="polite">
+  <div class="row"><div class="name" id="castName">—</div><div id="castTime">—</div></div>
+  <div class="bar"><div id="castBar"></div></div>
+</div>
 
 <!-- Mini mappa -->
 <div id="miniWrap" class="hidden"><canvas id="mini" width="80" height="48" aria-label="Mini mappa"></canvas></div>
@@ -193,18 +221,24 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   <div class="v" id="dpsText">0 (picco 0)</div>
 </div>
 
+<!-- Combat Log -->
+<section id="logPanel" class="log hidden">
+  <div class="h"><span>Combat Log</span><button id="btnLogClose" class="q-close" style="height:24px;width:24px">×</button></div>
+  <div id="logBody" class="b"></div>
+</section>
+
 <div id="errBox" class="err" style="display:none"></div>
 
 <script>
-/* ===== Drakoria — BUILD HUD-1 ===== */
+/* ===== Drakoria — BUILD HUD-2 ===== */
 (function(){
-  var BUILD='HUD-1';
+  var BUILD='HUD-2';
   var SAVE_KEY='save_xrq1_inv';
   var QUEST_KEY='quests_xrq1_inv';
 
   var cv=document.getElementById('game'); var ctx=cv.getContext('2d');
   var statusEl=document.getElementById('status');
-  var btnAttack=document.getElementById('btnAttack'), btnUsePotion=document.getElementById('btnUsePotion');
+  var btnAttack=document.getElementById('btnAttack'), btnUsePotion=document.getElementById('btnUsePotion'), btnCast=document.getElementById('btnCast');
   var btnSave=document.getElementById('btnSave'), btnLoad=document.getElementById('btnLoad'), btnReset=document.getElementById('btnReset');
   var btnQuest=document.getElementById('btnQuest'), btnQuestClose=document.getElementById('btnQuestClose');
   var questPanel=document.getElementById('questPanel'), questBody=document.getElementById('questBody');
@@ -225,6 +259,12 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   // DPS refs
   var dpsText=document.getElementById('dpsText');
   var dpsEvents=[], dpsPeak=0;
+
+  // Cast UI
+  var castWrap=document.getElementById('castWrap'), castName=document.getElementById('castName'), castTime=document.getElementById('castTime'), castBar=document.getElementById('castBar');
+
+  // Log UI
+  var btnLog=document.getElementById('btnLog'), logPanel=document.getElementById('logPanel'), logBody=document.getElementById('logBody'), btnLogClose=document.getElementById('btnLogClose');
 
   function panic(where, e){
     errBox.style.display='block';
@@ -303,6 +343,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       player.baseAtkMin += 1; player.baseAtkMax += 1;
       recomputeStats(true);
       flashScreen('#22c55e');
+      logSys('Level up! Ora sei LV '+player.lvl);
     }
     function recomputeStats(heal){
       var atkB=0, hpB=0;
@@ -332,10 +373,10 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     function questAdd(kind,amt){
       var q=quests[currentQuest]; if(!q||q.status!=='active') return;
       if(q.type==='collect' && kind==='coin'){ q.progress = Math.min(q.needed, q.progress + (amt||1)); }
-      if(q.progress>=q.needed){ q.status='completed'; toast('Quest completata! Riscatta.'); }
+      if(q.progress>=q.needed){ q.status='completed'; toast('Quest completata! Riscatta.'); logSys('Quest completata: '+q.title); }
       renderQuest();
     }
-    function claimQuest(){ var q=quests[currentQuest]; if(!q||q.status!=='completed') return; var rw=q.reward||{}; if(rw.xp) gainXP(rw.xp); if(rw.pots) player.pots += rw.pots; q.status='claimed'; toast('Ricompensa ottenuta.'); renderQuest(); updateHotbarCounts(); }
+    function claimQuest(){ var q=quests[currentQuest]; if(!q||q.status!=='completed') return; var rw=q.reward||{}; if(rw.xp) gainXP(rw.xp); if(rw.pots) player.pots += rw.pots; q.status='claimed'; toast('Ricompensa ottenuta.'); logLoot('Ricompensa: +'+(rw.xp||0)+' XP'+(rw.pots?(', +'+rw.pots+' poz.'):'')); renderQuest(); updateHotbarCounts(); }
     document.getElementById('btnQuest').addEventListener('click', function(){ questPanel.classList.toggle('hidden'); }, false);
     btnQuestClose.addEventListener('click', function(){ questPanel.classList.add('hidden'); }, false);
     renderQuest();
@@ -416,6 +457,8 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     function inRect(px,py,r){ return px>=r.x&&px<=r.x+r.w&&py>=r.y&&py<=r.y+r.h; }
 
     cv.addEventListener('click',function(ev){
+      // Spostarsi con tap (interrompe cast)
+      if(isCasting) cancelCast('Mossa durante il cast');
       var m = canvasToTile(ev), now=performance.now(), cd=(now-player.lastAtk)>=player.atkCd;
 
       var i, clickedEnemy=null;
@@ -443,7 +486,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     }, false);
 
     function tryAttackAdjacent(){
-      var now=performance.now(); if(now-player.lastAtk<player.atkCd) return false;
+      var now=performance.now(); if(now-player.lastAtk<player.atkCd || isCasting) return false;
       if(target && chebyshev(player,target)===1){ attackEnemy(target); return true; }
       for(var i=0;i<enemies.length;i++){ var en=enemies[i]; if(chebyshev(player,en)===1){ attackEnemy(en); return true; } }
       return false;
@@ -458,19 +501,20 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     slot1.addEventListener('click', function(){ usePotion(); }, false);
     slot1.addEventListener('touchend', function(e){ e.preventDefault(); usePotion(); }, false);
 
-    // Inventario: binding (click + touch)
-    btnInventory.onclick = function(){ invWin.classList.toggle('hidden'); renderInventory(); };
-    btnInventory.addEventListener('touchend', function(e){ e.preventDefault(); invWin.classList.toggle('hidden'); renderInventory(); }, false);
-    invClose.onclick = function(){ invWin.classList.add('hidden'); };
-    invClose.addEventListener('touchend', function(e){ e.preventDefault(); invWin.classList.add('hidden'); }, false);
-
-    btnUnequipWeapon.addEventListener('click', function(){ unequip('weapon'); }, false);
-    btnUnequipArmor .addEventListener('click', function(){ unequip('armor');  }, false);
-
     btnMini.addEventListener('click', function(){
       if(miniWrap.classList.contains('hidden')) miniWrap.classList.remove('hidden'); else miniWrap.classList.add('hidden');
       drawMini();
     }, false);
+
+    btnInventory.onclick = function(){ invWin.classList.toggle('hidden'); renderInventory(); };
+    invClose.onclick = function(){ invWin.classList.add('hidden'); };
+
+    btnUnequipWeapon.addEventListener('click', function(){ unequip('weapon'); }, false);
+    btnUnequipArmor .addEventListener('click', function(){ unequip('armor');  }, false);
+
+    // Log toggle
+    btnLog.addEventListener('click', function(){ logPanel.classList.toggle('hidden'); }, false);
+    btnLogClose.addEventListener('click', function(){ logPanel.classList.add('hidden'); }, false);
 
     // COMBAT / INTERAZIONI
     function addDmgText(tx,ty,txt,color){ var px=tx*TILE+TILE/2, py=ty*TILE+TILE/2-28; dmgTexts.push({x:px,y:py,txt:txt,color:color,ttl:700,vy:-0.04}); }
@@ -480,7 +524,6 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     function recordDPS(amount){
       var now=performance.now();
       dpsEvents.push({t:now, a:amount|0});
-      // purge >10s
       var cutoff=now-10000;
       while(dpsEvents.length && dpsEvents[0].t<cutoff) dpsEvents.shift();
       var sum=0; for(var i=0;i<dpsEvents.length;i++) sum+=dpsEvents[i].a;
@@ -490,7 +533,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     }
 
     function attackEnemy(t){
-      var now=performance.now(); player.lastAtk=now;
+      var now=performance.now(); if(isCasting) return; player.lastAtk=now;
       var base=rndInt(player.atkMin,player.atkMax);
       var isCrit = rollCrit(player.critChance);
       var dmg = Math.floor(base * (isCrit ? player.critMult : 1));
@@ -502,19 +545,36 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       t.aggro=true; t.lastSeenTs=now;
 
       recordDPS(dmg);
+      logDmg('Colpisci '+nameOf(t)+' per '+dmg+(isCrit?' (critico)':'')+'.');
+
       updateTargetFrame();
 
       if(t.hp===0){
         if(target===t){ target=null; autoChase=false; hideTargetFrame(); }
         spawnLootBag(t.x,t.y, t.kind||t.type);
         gainXP(t.type==='ranged'?25:20);
+        logSys(nameOf(t)+' è stato sconfitto.');
         enemies.splice(enemies.indexOf(t),1);
         var s=randEmpty(); enemies.push(t.type==='ranged' ? makeArcher(s.x,s.y) : makeSlime(s.x,s.y));
       }
       draw(); drawMini();
     }
 
-    function usePotion(){ if(player.pots<=0||player.hp>=player.maxHp) return; player.pots--; player.hp=Math.min(player.maxHp,player.hp+35); flashScreen('#8b5cf6'); updateHotbarCounts(); draw(); }
+    function takePlayerDamage(amount, label){
+      player.hp=Math.max(0,player.hp-amount);
+      addDmgText(player.x,player.y,label+amount, '#ff6b6b');
+      flashCircle(player.x,player.y, '#ff0000', 0.25, 26);
+      logDmg('Subisci '+amount+' danni.');
+      if(isCasting) cancelCast('Interrotto dal danno');
+      if(player.hp===0) gameOver();
+    }
+
+    function usePotion(){
+      if(player.pots<=0||player.hp>=player.maxHp) return;
+      player.pots--; var heal=35; player.hp=Math.min(player.maxHp,player.hp+heal);
+      flashScreen('#8b5cf6'); updateHotbarCounts(); draw();
+      logHeal('Pozione: +' + heal + ' HP.');
+    }
     function gameOver(){ alert('Sei stato sconfitto! Respawn al punto iniziale (niente perdita XP/livello).'); player.hp=player.maxHp; player.x=1; player.y=1; autoChase=false; }
 
     function hasLoS(ax,ay,bx,by){
@@ -579,6 +639,8 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
         updateHotbarCounts(); draw(); drawMini();
         if (coinsGained || potsGained) {
           toast('Raccolto: ' + (coinsGained?('🪙 x'+coinsGained+' '):'') + (potsGained?('🍵 x'+potsGained):''));
+          if(coinsGained) logLoot('Monete +' + coinsGained);
+          if(potsGained) logLoot('Pozioni +' + potsGained);
         }
         return;
       }
@@ -645,10 +707,10 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
     // INVENTARIO UI
     function applyItem(it){
-      if(it.type==='coin'){ player.coins += it.qty; questAdd('coin', it.qty); }
-      else if(it.type==='potion'){ player.pots += it.qty; }
-      else if(it.type==='weapon' || it.type==='armor'){ inventory.push(it); renderInventoryIfOpen(); toast('Aggiunto in inventario: '+it.name); }
-      else { inventoryStackOrPush(it); renderInventoryIfOpen(); toast('Ottenuto: '+it.name+(it.qty?(' x'+it.qty):'')); }
+      if(it.type==='coin'){ player.coins += it.qty; questAdd('coin', it.qty); logLoot('Monete +' + it.qty); }
+      else if(it.type==='potion'){ player.pots += it.qty; logLoot('Pozioni +' + it.qty); }
+      else if(it.type==='weapon' || it.type==='armor'){ inventory.push(it); renderInventoryIfOpen(); toast('Aggiunto in inventario: '+it.name); logLoot('Nuovo oggetto: '+it.name); }
+      else { inventoryStackOrPush(it); renderInventoryIfOpen(); toast('Ottenuto: '+it.name+(it.qty?(' x'+it.qty):'')); logLoot('Ottenuto: '+it.name); }
     }
     function inventoryStackOrPush(it){
       if(typeof it.qty==='number'){
@@ -674,16 +736,16 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
           if(it.type==='weapon'){
             btn.textContent = 'Equippa 🗡️ (+'+(it.atkBonus||0)+' ATK)';
-            btn.onclick=function(){ equip(it,'weapon'); removeFromInventory(idx); renderInventory(); toast('Equipaggiata: '+it.name); };
+            btn.onclick=function(){ equip(it,'weapon'); removeFromInventory(idx); renderInventory(); toast('Equipaggiata: '+it.name); logSys('Equip: '+it.name); };
           } else if(it.type==='armor'){
             btn.textContent = 'Equippa 🛡️ (+'+(it.hpBonus||0)+' HP)';
-            btn.onclick=function(){ equip(it,'armor'); removeFromInventory(idx); renderInventory(); toast('Equipaggiata: '+it.name); };
+            btn.onclick=function(){ equip(it,'armor'); removeFromInventory(idx); renderInventory(); toast('Equipaggiata: '+it.name); logSys('Equip: '+it.name); };
           } else if(it.type==='potion'){
             btn.textContent='Usa 🍵';
             btn.onclick=function(){
               if(player.hp>=player.maxHp){ toast('HP già al massimo'); return; }
-              it.qty = (it.qty||1)-1; player.hp = Math.min(player.maxHp, player.hp+35);
-              if(it.qty<=0) removeFromInventory(idx); renderInventory(); draw(); toast('Pozione usata');
+              it.qty = (it.qty||1)-1; var heal=35; player.hp = Math.min(player.maxHp, player.hp+heal);
+              if(it.qty<=0) removeFromInventory(idx); renderInventory(); draw(); toast('Pozione usata'); logHeal('Pozione: +'+heal+' HP.');
             };
           } else {
             btn.textContent='Tieni'; btn.disabled=true;
@@ -701,6 +763,54 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     function unequip(slot){
       if(!equipped[slot]) return;
       inventory.push(equipped[slot]); equipped[slot]=null; recomputeStats(false); renderInventory(); draw(); toast('Rimosso equip.');
+    }
+
+    // ===== CASTING / ABILITÀ =====
+    var isCasting=false, castStart=0, castDuration=1500, castNameStr='Ondata Arcana', lastCast= -1e9, castCd=6000;
+    btnCast.addEventListener('click', function(){
+      var now=performance.now();
+      if(isCasting) { cancelCast('Annullato'); return; }
+      if(now-lastCast<castCd){ toast('Abilità in ricarica'); logSys('Abilità in ricarica.'); return; }
+      startCast();
+    }, false);
+
+    function startCast(){
+      isCasting=true; castStart=performance.now();
+      castWrap.style.display='block'; castName.textContent=castNameStr;
+      castTime.textContent=(castDuration/1000).toFixed(1)+'s';
+      castBar.style.width='0%';
+      toast('Lanci '+castNameStr+'...'); logSys('Casting: '+castNameStr);
+      autoChase=false; pathQueue=[]; // stai fermo
+    }
+    function cancelCast(reason){
+      if(!isCasting) return;
+      isCasting=false; castWrap.style.display='none';
+      toast('Cast interrotto'); logSys('Cast interrotto: '+reason);
+    }
+    function finishCast(){
+      isCasting=false; castWrap.style.display='none';
+      lastCast=performance.now();
+      // Effetto: AoE raggio 1 (8 caselle intorno + stessa casella esclusa)
+      var total=0, hits=0;
+      for(var i=enemies.length-1;i>=0;i--){
+        var e=enemies[i]; var dx=Math.abs(e.x-player.x), dy=Math.abs(e.y-player.y);
+        if((dx+dy===1) || (dx===1 && dy===1)){ // adiacenti anche diagonali
+          var dmg=rndInt(10,16)+Math.floor(player.atkMin/2);
+          e.hp=Math.max(0,e.hp-dmg);
+          addDmgText(e.x,e.y,'AOE '+dmg,'#60a5fa');
+          flashCircle(e.x,e.y,'#60a5fa',0.28,30);
+          total+=dmg; hits++;
+          e.aggro=true; e.lastSeenTs=performance.now();
+          if(e.hp===0){
+            if(target===e){ target=null; autoChase=false; hideTargetFrame(); }
+            spawnLootBag(e.x,e.y, e.kind||e.type);
+            gainXP(e.type==='ranged'?25:20);
+            enemies.splice(i,1);
+          }
+        }
+      }
+      if(total>0){ recordDPS(total); logDmg('Ondata Arcana colpisce '+hits+' nemici per '+total+' danni totali.'); }
+      draw(); drawMini(); updateTargetFrame();
     }
 
     // SAVE/LOAD/RESET
@@ -752,7 +862,17 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
     function step(){
       try{
-        if(autoChase && target){
+        // Casting progression
+        if(isCasting){
+          var now=performance.now();
+          var elapsed=now-castStart;
+          var ratio=Math.max(0,Math.min(1,elapsed/castDuration));
+          castBar.style.width=(ratio*100)+'%';
+          castTime.textContent=((castDuration-elapsed)/1000).toFixed(1)+'s';
+          if(elapsed>=castDuration) finishCast();
+        }
+
+        if(autoChase && target && !isCasting){
           var stillThere=enemies.indexOf(target)!==-1;
           if(!stillThere){ autoChase=false; target=null; hideTargetFrame(); }
           if(target && chebyshev(player,target)!==1 && pathQueue.length===0){
@@ -764,7 +884,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
           }
         }
 
-        if(pathQueue.length){
+        if(pathQueue.length && !isCasting){
           var next=pathQueue.shift();
           var blocked=false, i;
           if(!walkable(next.x,next.y)) blocked=true;
@@ -799,15 +919,12 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
                 tryStepAlongPath(e);
               }
               var near = (Math.abs(e.x-player.x)+Math.abs(e.y-player.y))<=1;
-              if(near && (now-e.lastHit)>=e.hitCd){
+              if(near && (now-e.lastHit)>=e.hitCd && !isCasting){
                 e.lastHit=now;
                 var base=rndInt(e.atkMin,e.atkMax);
                 var isCrit = rollCrit(0.05);
                 var dmg=Math.floor(base*(isCrit?1.5:1));
-                player.hp=Math.max(0,player.hp-dmg);
-                addDmgText(player.x,player.y,(isCrit?'CRIT ':'-')+dmg, isCrit?'#f59e0b':'#ff6b6b');
-                flashCircle(player.x,player.y, isCrit?'#f59e0b':'#ff0000', isCrit?0.35:0.25, isCrit?30:26);
-                if(player.hp===0) gameOver();
+                takePlayerDamage(dmg, isCrit?'CRIT -':'-');
               }
             } else { // ranged
               var distM=manhattan(e,player);
@@ -833,15 +950,12 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
                 }
               }
               var adj = (Math.max(Math.abs(e.x-player.x),Math.abs(e.y-player.y))===1);
-              if(adj && (now-e.lastPoke)>=e.pokeCd){
+              if(adj && (now-e.lastPoke)>=e.pokeCd && !isCasting){
                 e.lastPoke=now;
                 var base2=rndInt(4,7);
                 var isCrit2 = rollCrit(0.05);
                 var dmg2=Math.floor(base2*(isCrit2?1.5:1));
-                player.hp=Math.max(0,player.hp-dmg2);
-                addDmgText(player.x,player.y,(isCrit2?'CRIT ':'-')+dmg2, isCrit2?'#f59e0b':'#ff6b6b');
-                flashCircle(player.x,player.y, isCrit2?'#f59e0b':'#ff0000', isCrit2?0.35:0.25, isCrit2?30:26);
-                if(player.hp===0) gameOver();
+                takePlayerDamage(dmg2, isCrit2?'CRIT -':'-');
               }
             }
           } else {
@@ -865,11 +979,8 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
           if(nx===player.x && ny===player.y){
             var isCrit = rollCrit(0.05);
             var dmgp = Math.floor(pr.dmg * (isCrit?1.5:1));
-            player.hp=Math.max(0,player.hp-dmgp);
-            addDmgText(player.x,player.y,(isCrit?'CRIT ':'-')+dmgp, isCrit?'#f59e0b':'#ff6b6b');
-            flashCircle(player.x,player.y, isCrit?'#f59e0b':'#ff0000', isCrit?0.35:0.25, isCrit?30:26);
+            takePlayerDamage(dmgp, isCrit?'CRIT -':'-');
             projectiles.splice(pi,1);
-            if(player.hp===0) gameOver();
             continue;
           }
           pr.x=nx; pr.y=ny;
@@ -878,12 +989,12 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
         // --- PICKUP MAGNET ---
         for(var c=coins.length-1;c>=0;c--){
           if(isAdjacent(coins[c].x,coins[c].y,player.x,player.y)){
-            coins.splice(c,1); player.coins++; questAdd('coin',1); gainXP(2);
+            coins.splice(c,1); player.coins++; questAdd('coin',1); gainXP(2); logLoot('Moneta +1');
           }
         }
         for(var p=potions.length-1;p>=0;p--){
           if(isAdjacent(potions[p].x,potions[p].y,player.x,player.y)){
-            potions.splice(p,1); player.pots++; updateHotbarCounts();
+            potions.splice(p,1); player.pots++; updateHotbarCounts(); logLoot('Pozione +1');
           }
         }
 
@@ -1025,10 +1136,11 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
     // ===== Target Frame & DPS UI =====
     function capFirst(s){ return s ? s.charAt(0).toUpperCase()+s.slice(1) : ''; }
+    function nameOf(t){ return t && (t.kind ? capFirst(t.kind) : (t.type==='ranged'?'Arciere':'Mostro')); }
     function updateTargetFrame(){
       if(!target || enemies.indexOf(target)===-1){ hideTargetFrame(); return; }
       tframe.style.display='block';
-      tfName.textContent = (target.kind ? capFirst(target.kind) : 'Nemico');
+      tfName.textContent = nameOf(target) || 'Nemico';
       tfKind.textContent = (target.type==='ranged'?'Ranged':'Melee');
       var dist = Math.max(Math.abs(player.x-target.x), Math.abs(player.y-target.y));
       tfDist.textContent = dist+' tiles';
@@ -1045,7 +1157,26 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       dpsText.textContent = dps + ' (picco ' + dpsPeak + ')';
     }
 
+    // ===== Combat Log helpers =====
+    var logLines=[];
+    function pushLog(html, cls){
+      var t=new Date(), hh=String(t.getHours()).padStart(2,'0'), mm=String(t.getMinutes()).padStart(2,'0'), ss=String(t.getSeconds()).padStart(2,'0');
+      logLines.push('<div class="line '+(cls||'')+'">['+hh+':'+mm+':'+ss+'] '+html+'</div>');
+      if(logLines.length>80) logLines.shift();
+      logBody.innerHTML=logLines.join('');
+      logBody.scrollTop=logBody.scrollHeight;
+    }
+    function logDmg(msg){ pushLog(escapeHtml(msg), 'dmg'); }
+    function logHeal(msg){ pushLog(escapeHtml(msg), 'heal'); }
+    function logLoot(msg){ pushLog(escapeHtml(msg), 'loot'); }
+    function logSys(msg){ pushLog(escapeHtml(msg), 'sys'); }
+    function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
+
   }catch(e){ panic('boot', e); }
+
+  /* ====== Fine try/catch; funzioni globali fuori per essere visibili ====== */
+
+  // At the very end nothing else
 })();
 </script>
 </body>
