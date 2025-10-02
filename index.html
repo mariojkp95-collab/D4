@@ -834,8 +834,7 @@ function tileFree(x,y){
       return false;
     }
 
-    <!-- SOSTITUISCI QUESTO BLOCCO -->
-<script>
+    
 // ===== LOOT & ITEMS =====
 var BAG_TTL_MS = 90000, BAG_WARN_MS = 10000;
 
@@ -972,13 +971,24 @@ function autoPickupCommons(bag){
   bag.items=keep;
   return bag.items.length===0;
 }
-</script>
-<!-- FINE SOSTITUZIONE -->
 
-    // INVENTARIr.coins += it.qty; questAdd('coin', it.qty); logLoot('Monete +' + it.qty); }
-      else if(it.type==='potion'){ player.pots += it.qty; logLoot('Pozioni +' + it.qty); }
-      else { inventoryStackOrPush(it); renderInventoryIfOpen(); toast('Ottenuto: '+it.name+(it.qty?(' x'+it.qty):'')); logLoot('Ottenuto: '+it.name); }
-    }
+
+    function applyItem(it){
+  if(it.type==='coin'){
+    player.coins += it.qty;
+    questAdd('coin', it.qty);
+    logLoot('Monete +' + it.qty);
+  } else if(it.type==='potion'){
+    player.pots += it.qty;
+    updateHotbarCounts();
+    logLoot('Pozioni +' + it.qty);
+  } else {
+    inventoryStackOrPush(it);
+    renderInventoryIfOpen();
+    toast('Ottenuto: ' + it.name + (it.qty?(' x'+it.qty):''));
+    logLoot('Ottenuto: ' + it.name);
+  }
+}
     function inventoryStackOrPush(it){
       if(typeof it.qty==='number'){
         for(var i=0;i<inventory.length;i++){ var x=inventory[i]; if(x.type===it.type && x.name===it.name && typeof x.qty==='number'){ x.qty+=it.qty; return; } }
