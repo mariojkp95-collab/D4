@@ -1573,170 +1573,153 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 })();
 </script>
 <!-- /ABIL-SIMPLE-PATCH -->
-<!-- PATCH-ABIL-UX v3: cast senza aprire la finestra + long-press 3s per rimuovere -->
+<!-- PATCH-ABIL-UX v4: cast 100% invisibile (anche la prima volta) + long-press 3s -->
 <script>
 (function(){
-  if (window.__ABIL_UX_V3__) return;
-  window.__ABIL_UX_V3__ = true;
+  if (window.__ABIL_UX_V4__) return; window.__ABIL_UX_V4__ = true;
 
   const SLOT_IDS=[null,'slot1','slot2','slot3','slot4','slot5'];
   const CAP_IDS =[null,'slotCap1','slotCap2','slotCap3','slotCap4','slotCap5'];
-  const $ = s => document.querySelector(s);
-  const $$ = s => Array.from(document.querySelectorAll(s));
+  const $=s=>document.querySelector(s);
+  const $$=s=>Array.from(document.querySelectorAll(s));
 
-  // --- 0) Shadow area: qui cloneremo i bottoni "Lancia" per castare senza aprire la finestra ---
+  // 0) CSS: durante il cast "shadow" tutto ciò che è abilWin è invisibile a forza
+  (function ensureCss(){
+    if($('#abilGhostStyleV4')) return;
+    const st=document.createElement('style');
+    st.id='abilGhostStyleV4';
+    st.textContent = `
+      body.casting-shadow #abilWin { display:none !important; visibility:hidden !important; opacity:0 !important; }
+      body.casting-shadow .modal, body.casting-shadow .overlay, body.casting-shadow [class*="backdrop"] { display:none !important; }
+      body.casting-shadow * { transition:none !important; animation:none !important; }
+    `;
+    document.head.appendChild(st);
+  })();
+
+  // 1) Shadow area & mappa bottoni
   function ensureShadow(){
-    if ($('#abilShadow')) return $('#abilShadow');
-    const d=document.createElement('div');
+    let d=$('#abilShadow'); if(d) return d;
+    d=document.createElement('div');
     d.id='abilShadow';
     d.style.cssText='position:fixed;left:-99999px;top:-99999px;width:1px;height:1px;overflow:hidden';
     document.body.appendChild(d);
     return d;
   }
   const shadow = ensureShadow();
-  const abMap = Object.create(null); // {abId: HTMLButtonElement(clonato)}
+  const abMap = Object.create(null); // {abId: HTMLButtonElement(clone)}
 
-  // --- 1) Quando apri Abilità, mappa/aggiorna i bottoni "Lancia" nel shadow (no observer, una passata) ---
-  function indexAbilitiesOnce(){
-    const grid = $('#abilGrid'); if(!grid) return;
-    const cards = $$('#abilGrid .abilItem');
-    for(const card of cards){
-      const cap = card.querySelector('.cap');
-      const name = (cap?.textContent || 'abil').trim();
-      const abId = 'ab_'+name.toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'');
-      if (abMap[abId]) continue; // già indicizzata
+  // 2) Indicizza una volta i bottoni "Lancia" SENZA mostrare UI
+  function indexAbilitiesSilently(){
+    const win=$('#abilWin'), abBtn=$('#btnAbilities'), abClose=$('#abilClose');
+    if(!win || !abBtn) return false;
 
-      // Priorità a .btnCast, altrimenti primo .btn
-      const btn = card.querySelector('.btnCast') || card.querySelector('.btn');
-      if(!btn) continue;
-
-      // Cloniamo il bottone e lo mettiamo nello shadow: cliccandolo esegue lo stesso handler
-      const clone = btn.cloneNode(true);
-      // Copia anche eventuale onclick inline
-      if (btn.getAttribute('onclick')) clone.setAttribute('onclick', btn.getAttribute('onclick'));
-      // Propaga gli stessi listener programmati (best-effort): se il gioco usa addEventListener,
-      // il clone non eredita; allora provo a simulare click sul vero bottone, ma senza mostrare la finestra.
-      clone.addEventListener('click', (e)=>{
-        e.preventDefault(); e.stopPropagation();
-        // Se il bottone originale esiste nel DOM, click su quello (finestra già aperta).
-        // Altrimenti, fallback: provo a triggerare l'handler inline già copiato.
-        if (btn.isConnected) { btn.click(); }
-        else { /* l'inline onclick rimane sul clone, quindi si esegue comunque */ }
-      }, true);
-
-      shadow.appendChild(clone);
-      abMap[abId] = clone;
-    }
-  }
-
-  // Hook sul pulsante "Abilità": ogni volta che apri la finestra, indicizza (una passata)
-  (function hookIndex(){
-    const abBtn = $('#btnAbilities');
-    if (!abBtn || abBtn.__abil_v3__) return;
-    abBtn.addEventListener('click', ()=> setTimeout(indexAbilitiesOnce, 40), false);
-    abBtn.__abil_v3__ = true;
-  })();
-
-  // --- 2) Cast dagli slot SENZA aprire/mostrare la finestra ---
-  function castAbilityNoUI(abId){
-    const b = abMap[abId];
-    if (b) { 
-      // click sul clone nel shadow → esegue lo stesso effetto della card
-      b.click();
-      return;
-    }
-    // se non ancora indicizzata (non hai mai aperto Abilità), fai un indexing "stealth" una volta
-    // aprendo e richiudendo INvisibilmente nello stesso frame
-    const win = $('#abilWin'), abBtn=$('#btnAbilities'), closeBtn=$('#abilClose');
-    if (!win || !abBtn) return;
     const wasHidden = win.classList.contains('hidden');
-    // rende invisibile per questo giro
-    const prevVis = win.style.visibility, prevDisp = win.style.display, prevOp=win.style.opacity;
-    win.style.visibility='hidden'; win.style.opacity='0'; // ancora nel flow, ma non visibile
-    if (wasHidden) abBtn.click();
-    setTimeout(()=>{
-      indexAbilitiesOnce();
-      if (wasHidden && closeBtn) closeBtn.click();
-      // ripristina stile
-      win.style.visibility=prevVis||''; win.style.opacity=prevOp||'';
-      // tenta ora il cast
-      if (abMap[abId]) abMap[abId].click();
-    }, 30);
+    document.body.classList.add('casting-shadow'); // nasconde tutto ciò che riguarda abilità
+
+    if(wasHidden) abBtn.click(); // apre, ma invisibile
+
+    // Aspetta 2 frame per essere sicuri che il DOM interno sia popolato
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      const cards = $$('#abilGrid .abilItem');
+      for(const card of cards){
+        const cap = card.querySelector('.cap');
+        const name = (cap?.textContent || 'abil').trim();
+        const abId = 'ab_'+name.toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'');
+        if (abMap[abId]) continue;
+        const btn = card.querySelector('.btnCast') || card.querySelector('.btn');
+        if(!btn) continue;
+        const clone = btn.cloneNode(true);
+        if (btn.getAttribute('onclick')) clone.setAttribute('onclick', btn.getAttribute('onclick'));
+        clone.addEventListener('click',(e)=>{
+          e.preventDefault(); e.stopPropagation();
+          if(btn.isConnected){ btn.click(); } // richiama lo stesso handler del gioco
+          // se non è connesso e c’è un onclick inline, quello del clone parte comunque
+        }, true);
+        shadow.appendChild(clone);
+        abMap[abId]=clone;
+      }
+      if(wasHidden) abClose?.click();   // richiudi, sempre invisibile
+      document.body.classList.remove('casting-shadow');
+    }));
+    return true;
   }
 
-  // --- 3) Long-press 3s per rimuovere abilità + protezione contro rimozioni involontarie ---
-  const LP_MS = 3000;
-  function enableSlotLongPressRemove(){
+  // 3) Cast dagli slot senza UI (usa il clone; se non c'è, indicizza in invisibile e poi clicca)
+  function castAbilityNoUI(abId){
+    const cloned = abMap[abId];
+    if (cloned) { cloned.click(); return; }
+    // non indicizzata: fai indicizzazione invisibile e poi clicca
+    if (indexAbilitiesSilently()){
+      // attesa brevissima per permettere l'indicizzazione
+      setTimeout(()=>{ abMap[abId]?.click(); }, 30);
+    }
+  }
+
+  // 4) Long-press 3s per rimuovere l’assegnazione dallo slot
+  function enableSlotLongPressRemove(ms=3000){
     for(let s=1;s<=5;s++){
       const slotEl=document.getElementById(SLOT_IDS[s]); if(!slotEl) continue;
-      if (slotEl.__lp_v3__) continue; slotEl.__lp_v3__=true;
+      if (slotEl.__lp_v4__) continue; slotEl.__lp_v4__=true;
 
       let tid=null, moved=false, armed=false;
-
-      const start=()=>{ 
-        moved=false; 
-        cancel();
-        armed = true;
-        tid=setTimeout(()=>{
-          if(!armed) return;
-          if(moved)  return;
-          if((slotEl.dataset.kind||'')==='ability'){
-            slotEl.dataset.kind=''; slotEl.dataset.abId=''; slotEl.dataset.icon='';
-            const cap=document.getElementById(CAP_IDS[s]); if(cap) cap.textContent='—';
-            const st=$('#status'); if(st) st.textContent='[ABIL] Slot '+s+' svuotato';
-          }
-        }, LP_MS);
-      };
+      const start=()=>{ moved=false; cancel(); armed=true; tid=setTimeout(()=>{
+        if(!armed||moved) return;
+        if((slotEl.dataset.kind||'')==='ability'){
+          slotEl.dataset.kind=''; slotEl.dataset.abId=''; slotEl.dataset.icon='';
+          const cap=document.getElementById(CAP_IDS[s]); if(cap) cap.textContent='—';
+          const st=$('#status'); if(st) st.textContent='[ABIL] Slot '+s+' svuotato';
+        }
+      }, ms); };
       const cancel=()=>{ if(tid){ clearTimeout(tid); tid=null; } armed=false; };
 
-      // touch
+      // mobile
       slotEl.addEventListener('touchstart', start, {passive:true});
       slotEl.addEventListener('touchend',   cancel, {passive:true});
       slotEl.addEventListener('touchmove', ()=>{ moved=true; cancel(); }, {passive:true});
-      // mouse
+      // desktop
       slotEl.addEventListener('mousedown', (e)=>{ if(e.button!==0) return; start(); });
       slotEl.addEventListener('mouseup', cancel);
       slotEl.addEventListener('mouseleave', cancel);
 
-      // Importantissimo: se clicchi lo slot per castare, cancella subito un eventuale long-press pendente
+      // se sto castando con tap normale, cancella un eventuale long-press pendente
       slotEl.addEventListener('click', cancel, true);
       slotEl.addEventListener('touchend', cancel, {passive:true, capture:true});
     }
   }
 
-  // --- 4) Tap sugli slot: se abilità → cast “shadow”; NON togliere binding ---
+  // 5) Hook: tap sugli slot = cast invisibile, mai aprire la finestra
   function hookSlotCasts(){
     for(let s=1;s<=5;s++){
       const el=document.getElementById(SLOT_IDS[s]); if(!el) continue;
-      if (el.__tap_v3__) continue; el.__tap_v3__=true;
+      if (el.__tap_v4__) continue; el.__tap_v4__=true;
 
-      el.addEventListener('click', (e)=>{
+      const handle=(e)=>{
         if((el.dataset.kind||'')!=='ability') return;
         e.preventDefault(); e.stopPropagation();
-        const abId = el.dataset.abId;
-        if(!abId) return;
-        castAbilityNoUI(abId); // nessuna apertura finestra
-      }, true);
-
-      el.addEventListener('touchend', (e)=>{
-        if((el.dataset.kind||'')!=='ability') return;
-        e.preventDefault(); e.stopPropagation();
-        const abId = el.dataset.abId;
-        if(!abId) return;
+        const abId=el.dataset.abId; if(!abId) return;
         castAbilityNoUI(abId);
-      }, {passive:false, capture:true});
+      };
+      el.addEventListener('click', handle, true);
+      el.addEventListener('touchend', handle, {passive:false, capture:true});
     }
   }
 
+  // 6) (opzionale) se apri manualmente Abilità, aggiorna la mappa (non fa lampeggiare nulla)
+  (function hookManualOpen(){
+    const abBtn=$('#btnAbilities'); if(!abBtn || abBtn.__idx_v4__) return;
+    abBtn.addEventListener('click', ()=> setTimeout(()=>{ document.body.classList.add('casting-shadow'); indexAbilitiesSilently(); document.body.classList.remove('casting-shadow'); }, 40), false);
+    abBtn.__idx_v4__=true;
+  })();
+
   function init(){
-    ensureShadow();
-    enableSlotLongPressRemove();
+    enableSlotLongPressRemove(3000);
     hookSlotCasts();
   }
-  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', init);
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init);
   else init();
+
 })();
 </script>
-<!-- /PATCH-ABIL-UX v3 -->
+<!-- /PATCH-ABIL-UX v4 -->
 </body>
 </html>
