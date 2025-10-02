@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Drakoria — D3-COMPAT-XRQ1-HUDLITE-TGT1</title>
+<title>Drakoria — D3-COMPAT-XRQ1-HUDLITE-TGT2</title>
 <style>
 :root{
   --bg:#0b1224; --panel:#0f172a; --stroke:#1f2a44; --text:#e5e7eb; --muted:#9ca3af;
@@ -17,7 +17,7 @@ header .muted{color:var(--muted);margin-left:8px}
 header button{background:#26325a;color:#fff;border:1px solid #31406e;border-radius:8px;padding:6px 10px;cursor:pointer}
 header button:hover{filter:brightness(1.05)}
 main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);border:1px solid var(--stroke);border-radius:12px;position:relative}
-#game{display:block;width:100%;height:auto;border-radius:10px;border:1px solid var(--stroke);background:#0a1630;image-rendering:pixelated;touch-action:manipulation}
+#game{display:block;width:100%;height:auto;border-radius:10px;border:1px solid #var(--stroke);background:#0a1630;image-rendering:pixelated;touch-action:manipulation}
 .help{margin:.6rem 0 0;color:#a1a1aa}
 .help .coin{color:var(--coin);font-weight:700}
 .help .potion{color:#a78bfa;font-weight:700}
@@ -66,7 +66,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 /* Hotbar basso — alzata per non coprire i FAB */
 .hotbar{
   position:fixed; left:50%; transform:translateX(-50%);
-  bottom:80px; /* prima era 10px */
+  bottom:80px;
   display:flex; gap:8px; z-index:22;
   background:rgba(15,23,42,.85); border:1px solid #1f2a44; padding:6px 8px; border-radius:12px; backdrop-filter: blur(4px);
 }
@@ -94,8 +94,8 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 <main>
   <canvas id="game" width="960" height="576" aria-label="Gioco"></canvas>
   <p class="help">
-    Clicca per muoverti • tap su un <b>nemico</b> per <b>selezionarlo</b> • <b>🗡️</b> o <b>SPAZIO</b> attacca il <b>target</b> se adiacente •
-    Raccogli <span class="coin">●</span> e <span class="potion">🍵</span> • Doppio tap = pozione
+    Clicca per muoverti • tap su un <b>nemico</b> per <b>selezionarlo</b> • <b>doppio tap</b> sullo stesso nemico per <b>auto-inseguire e attaccare</b> •
+    <b>🗡️</b> o <b>SPAZIO</b> attacca se adiacente • Raccogli <span class="coin">●</span> e <span class="potion">🍵</span>
   </p>
   <div id="status"></div>
 </main>
@@ -131,9 +131,9 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 <div id="errBox" class="err" style="display:none"></div>
 
 <script>
-/* ===== Drakoria — BUILD D3-COMPAT-XRQ1-HUDLITE-TGT1 ===== */
+/* ===== Drakoria — BUILD D3-COMPAT-XRQ1-HUDLITE-TGT2 ===== */
 (function(){
-  var BUILD='D3-COMPAT-XRQ1-HUDLITE-TGT1';
+  var BUILD='D3-COMPAT-XRQ1-HUDLITE-TGT2';
   var SAVE_KEY='save_xrq1_compat';
   var QUEST_KEY='quests_xrq1_compat';
 
@@ -161,17 +161,18 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     for(var i0=0;i0<16;i0++){ var bx=(Math.random()*COLS|0), by=(Math.random()*ROWS|0); if((bx===1&&by===1)||(bx===COLS-2&&by===ROWS-2)){} else map[by][bx]=1; }
 
     // --- PLAYER / ENEMY / ITEMS
+    var _eid=1; function giveId(e){ e.id=_eid++; return e; }
     var player={x:1,y:1,hp:100,maxHp:100,coins:0,pots:1,atkMin:6,atkMax:12,lastAtk:0,atkCd:450,lvl:1,exp:0};
     var enemies=[
-      {type:'melee',x:COLS-2,y:ROWS-2,hp:60,maxHp:60,lastHit:0,hitCd:800,atkMin:5,atkMax:9,mode:'patrol',tick:0,moveEvery:6},
-      {type:'ranged',x:COLS-4,y:2,hp:40,maxHp:40,atkCd:1200,lastShot:0,rangeMin:3,rangeMax:7,kiteEvery:2,moveTick:0,patrolEvery:10,pokeCd:700,lastPoke:0}
+      giveId({type:'melee',x:COLS-2,y:ROWS-2,hp:60,maxHp:60,lastHit:0,hitCd:800,atkMin:5,atkMax:9,mode:'patrol',tick:0,moveEvery:6}),
+      giveId({type:'ranged',x:COLS-4,y:2,hp:40,maxHp:40,atkCd:1200,lastShot:0,rangeMin:3,rangeMax:7,kiteEvery:2,moveTick:0,patrolEvery:10,pokeCd:700,lastPoke:0})
     ];
     var coins=[], potions=[], projectiles=[];
     for(var i1=0;i1<6;i1++) coins.push(randEmpty());
     for(var i2=0;i2<2;i2++) potions.push(randEmpty());
 
-    // --- TARGET LOCK
-    var target=null;
+    // --- TARGET LOCK + AUTO-CHASE
+    var target=null, autoChase=false, lastEnemyTapTs=0, lastEnemyTapId=-1;
 
     // --- HUD: floating damage texts
     var dmgTexts=[]; // {x,y,txt,color,ttl,vy}
@@ -276,6 +277,22 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       }
       return null;
     }
+    function bfsToAdjacency(sx,sy,tx,ty){
+      // prova tutte le caselle adiacenti al target, scegli il path più corto
+      var opts=[[tx+1,ty],[tx-1,ty],[tx,ty+1],[tx,ty-1]];
+      var best=null;
+      for(var i=0;i<opts.length;i++){
+        var ax=opts[i][0], ay=opts[i][1];
+        if(!walkable(ax,ay)) continue;
+        // evita di pianificare di stare sopra al player o ad altri nemici (eccetto il target)
+        var occupied=false, j;
+        for(j=0;j<enemies.length;j++){ var e=enemies[j]; if(e.x===ax && e.y===ay){ occupied=true; break; } }
+        if(occupied) continue;
+        var p=bfs(sx,sy,ax,ay);
+        if(p && (!best || p.length<best.length)) best=p;
+      }
+      return best;
+    }
 
     // --- INPUT
     var pathQueue=[], lastTapTs=0;
@@ -295,18 +312,26 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     cv.addEventListener('click',function(ev){
       var m=canvasToTile(ev), now=performance.now(), cd=(now-player.lastAtk)>=player.atkCd;
 
-      // 1) Se clicco un nemico → set target (anche se non adiacente)
+      // Clic su un nemico?
       var i, clickedEnemy=null;
       for(i=0;i<enemies.length;i++){ var ee=enemies[i]; if(inRect(m.sx,m.sy,enemyRect(ee))){ clickedEnemy=ee; break; } }
-      if(clickedEnemy){ target = clickedEnemy; draw(); return; }
 
-      // 2) Se il target è adiacente e CD pronto → attacco
+      if(clickedEnemy){
+        // Doppio tap sullo stesso nemico → auto-chase
+        if(lastEnemyTapId===clickedEnemy.id && (now-lastEnemyTapTs)<=350){
+          target = clickedEnemy; autoChase = true; pathQueue = []; // reset path e vai di inseguimento
+        }else{
+          // Primo tap: seleziona soltanto
+          target = clickedEnemy; autoChase = false;
+        }
+        lastEnemyTapId = clickedEnemy.id; lastEnemyTapTs = now;
+        draw(); return;
+      }
+
+      // Se target adiacente e CD pronto → attacco
       if(target && chebyshev(player,target)===1 && cd){ attackEnemy(target); return; }
 
-      // 3) Altrimenti: se clicco su un nemico adiacente → attacco
-      for(i=0;i<enemies.length;i++){ var e=enemies[i]; if(chebyshev(player,e)===1 && inRect(m.sx,m.sy,enemyRect(e)) && cd){ attackEnemy(e); return; } }
-
-      // 4) Altrimenti muovi
+      // Altrimenti muovi verso la casella cliccata
       var p=bfs(player.x,player.y,m.tx,m.ty); if(p && p.length) pathQueue=p;
     }, false);
 
@@ -317,9 +342,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
     function tryAttackAdjacent(){
       var now=performance.now(); if(now-player.lastAtk<player.atkCd) return false;
-      // priorità al target
       if(target && chebyshev(player,target)===1){ attackEnemy(target); return true; }
-      // fallback: qualsiasi adiacente
       for(var i=0;i<enemies.length;i++){ var en=enemies[i]; if(chebyshev(player,en)===1){ attackEnemy(en); return true; } }
       return false;
     }
@@ -350,11 +373,11 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       var dmg=rndInt(player.atkMin,player.atkMax);
       t.hp=Math.max(0,t.hp-dmg); addDmgText(t.x,t.y,'-'+dmg,'#ffd166'); flashCircle(t.x,t.y,'#ff0000',0.25,26);
       if(t.hp===0){
-        if(target===t) target=null; // sgancia target se muore
+        if(target===t){ target=null; autoChase=false; }
         if(Math.random()<0.7) coins.push({x:t.x,y:t.y}); else potions.push({x:t.x,y:t.y});
         gainXP(t.type==='ranged'?25:20);
         enemies.splice(enemies.indexOf(t),1);
-        var s=randEmpty(); enemies.push( t.type==='ranged' ? spawnRangedAt(s.x,s.y) : spawnMeleeAt(s.x,s.y) );
+        var s=randEmpty(); enemies.push( (t.type==='ranged') ? giveId(spawnRangedAt(s.x,s.y)) : giveId(spawnMeleeAt(s.x,s.y)) );
       }
       draw(); drawMini();
     }
@@ -363,7 +386,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     function spawnRangedAt(x,y){ return {type:'ranged',x:x,y:y,hp:40,maxHp:40,atkCd:1200,lastShot:0,rangeMin:3,rangeMax:7,kiteEvery:2,moveTick:0,patrolEvery:10,pokeCd:700,lastPoke:0}; }
 
     function usePotion(){ if(player.pots<=0||player.hp>=player.maxHp) return; player.pots--; player.hp=Math.min(player.maxHp,player.hp+35); flashScreen('#8b5cf6'); updateHotbarCounts(); draw(); }
-    function gameOver(){ alert('Sei stato sconfitto! Respawn al punto iniziale (niente perdita XP/livello).'); player.hp=player.maxHp; player.x=1; player.y=1; }
+    function gameOver(){ alert('Sei stato sconfitto! Respawn al punto iniziale (niente perdita XP/livello).'); player.hp=player.maxHp; player.x=1; player.y=1; autoChase=false; }
 
     // --- Ranged helpers
     function hasLoS(ax,ay,bx,by){
@@ -400,6 +423,23 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     // --- LOOP
     function step(){
       try{
+        // Se autoChase attivo, pianifica percorso verso adiacenza al target
+        if(autoChase && target){
+          // se target non esiste più (rimosso) → spegni
+          var stillThere=false; for(var te=0; te<enemies.length; te++){ if(enemies[te]===target){ stillThere=true; break; } }
+          if(!stillThere){ autoChase=false; target=null; }
+
+          // se non adiacente, crea (o rinfresca) path verso adiacenza
+          if(target && chebyshev(player,target)!==1 && pathQueue.length===0){
+            var pAdj=bfsToAdjacency(player.x,player.y,target.x,target.y);
+            if(pAdj && pAdj.length) pathQueue=pAdj;
+          }
+          // se adiacente e CD pronto → attacca
+          if(target && chebyshev(player,target)===1){
+            var nowA=performance.now(); if(nowA-player.lastAtk>=player.atkCd) attackEnemy(target);
+          }
+        }
+
         // path (player)
         if(pathQueue.length){
           var next=pathQueue.shift();
@@ -528,7 +568,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       drawXpBar();
 
       // status + build
-      statusEl.textContent = 'build: '+BUILD+' | LV '+player.lvl+' | HP '+player.hp+'/'+player.maxHp+' | coins '+player.coins+' | pots '+player.pots+(target?' | target lock ON':'');
+      statusEl.textContent = 'build: '+BUILD+' | LV '+player.lvl+' | HP '+player.hp+'/'+player.maxHp+' | coins '+player.coins+' | pots '+player.pots+(target?' | target lock ON'+(autoChase?' (auto)':''):'');
       ctx.fillStyle='#ffffffcc'; ctx.font='bold 14px system-ui'; ctx.fillText('BUILD '+BUILD, 8, 24);
     }
 
