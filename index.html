@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Drakoria — D3-COMPAT-XRQ1-HUDLITE-TGT2</title>
+<title>Drakoria — D3-COMPAT-XRQ1-HUDLITE-TGT3</title>
 <style>
 :root{
   --bg:#0b1224; --panel:#0f172a; --stroke:#1f2a44; --text:#e5e7eb; --muted:#9ca3af;
@@ -17,7 +17,7 @@ header .muted{color:var(--muted);margin-left:8px}
 header button{background:#26325a;color:#fff;border:1px solid #31406e;border-radius:8px;padding:6px 10px;cursor:pointer}
 header button:hover{filter:brightness(1.05)}
 main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);border:1px solid var(--stroke);border-radius:12px;position:relative}
-#game{display:block;width:100%;height:auto;border-radius:10px;border:1px solid #var(--stroke);background:#0a1630;image-rendering:pixelated;touch-action:manipulation}
+#game{display:block;width:100%;height:auto;border-radius:10px;border:1px solid var(--stroke);background:#0a1630;image-rendering:pixelated;touch-action:manipulation}
 .help{margin:.6rem 0 0;color:#a1a1aa}
 .help .coin{color:var(--coin);font-weight:700}
 .help .potion{color:#a78bfa;font-weight:700}
@@ -131,9 +131,9 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 <div id="errBox" class="err" style="display:none"></div>
 
 <script>
-/* ===== Drakoria — BUILD D3-COMPAT-XRQ1-HUDLITE-TGT2 ===== */
+/* ===== Drakoria — BUILD D3-COMPAT-XRQ1-HUDLITE-TGT3 ===== */
 (function(){
-  var BUILD='D3-COMPAT-XRQ1-HUDLITE-TGT2';
+  var BUILD='D3-COMPAT-XRQ1-HUDLITE-TGT3';
   var SAVE_KEY='save_xrq1_compat';
   var QUEST_KEY='quests_xrq1_compat';
 
@@ -277,21 +277,27 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       }
       return null;
     }
-    function bfsToAdjacency(sx,sy,tx,ty){
-      // prova tutte le caselle adiacenti al target, scegli il path più corto
+    // Adiacenza “furba”: evita l’allineamento col ranged quando possibile
+    function bfsToAdjacencySmart(sx,sy,tx,ty,enemyType){
       var opts=[[tx+1,ty],[tx-1,ty],[tx,ty+1],[tx,ty-1]];
-      var best=null;
+      var bestPath=null, bestScore=1e9;
       for(var i=0;i<opts.length;i++){
         var ax=opts[i][0], ay=opts[i][1];
         if(!walkable(ax,ay)) continue;
-        // evita di pianificare di stare sopra al player o ad altri nemici (eccetto il target)
+        // niente occupazioni da altri nemici
         var occupied=false, j;
         for(j=0;j<enemies.length;j++){ var e=enemies[j]; if(e.x===ax && e.y===ay){ occupied=true; break; } }
         if(occupied) continue;
         var p=bfs(sx,sy,ax,ay);
-        if(p && (!best || p.length<best.length)) best=p;
+        if(!p) continue;
+        var score=p.length;
+        if(enemyType==='ranged'){
+          // penalizza stare sulla stessa riga o colonna del ranged
+          if(ax===tx || ay===ty) score += 2;
+        }
+        if(score<bestScore){ bestScore=score; bestPath=p; }
       }
-      return best;
+      return bestPath;
     }
 
     // --- INPUT
@@ -312,27 +318,28 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     cv.addEventListener('click',function(ev){
       var m=canvasToTile(ev), now=performance.now(), cd=(now-player.lastAtk)>=player.atkCd;
 
-      // Clic su un nemico?
+      // Hai cliccato un nemico?
       var i, clickedEnemy=null;
       for(i=0;i<enemies.length;i++){ var ee=enemies[i]; if(inRect(m.sx,m.sy,enemyRect(ee))){ clickedEnemy=ee; break; } }
 
       if(clickedEnemy){
-        // Doppio tap sullo stesso nemico → auto-chase
+        // Doppio tap sullo stesso → auto-chase ON
         if(lastEnemyTapId===clickedEnemy.id && (now-lastEnemyTapTs)<=350){
-          target = clickedEnemy; autoChase = true; pathQueue = []; // reset path e vai di inseguimento
+          target = clickedEnemy; autoChase = true; pathQueue = [];
         }else{
-          // Primo tap: seleziona soltanto
+          // Primo tap: lock target
           target = clickedEnemy; autoChase = false;
         }
         lastEnemyTapId = clickedEnemy.id; lastEnemyTapTs = now;
         draw(); return;
       }
 
-      // Se target adiacente e CD pronto → attacco
-      if(target && chebyshev(player,target)===1 && cd){ attackEnemy(target); return; }
-
-      // Altrimenti muovi verso la casella cliccata
+      // Tap a vuoto → spegni auto-chase e muovi lì
+      autoChase = false;
       var p=bfs(player.x,player.y,m.tx,m.ty); if(p && p.length) pathQueue=p;
+
+      // Se casualmente il target è adiacente e CD pronto → attacco (fallback)
+      if(target && chebyshev(player,target)===1 && cd){ attackEnemy(target); return; }
     }, false);
 
     cv.addEventListener('pointerdown',function(){
@@ -377,7 +384,8 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
         if(Math.random()<0.7) coins.push({x:t.x,y:t.y}); else potions.push({x:t.x,y:t.y});
         gainXP(t.type==='ranged'?25:20);
         enemies.splice(enemies.indexOf(t),1);
-        var s=randEmpty(); enemies.push( (t.type==='ranged') ? giveId(spawnRangedAt(s.x,s.y)) : giveId(spawnMeleeAt(s.x,s.y)) );
+        var s=randEmpty(); var nu = (t.type==='ranged') ? giveId(spawnRangedAt(s.x,s.y)) : giveId(spawnMeleeAt(s.x,s.y));
+        enemies.push(nu);
       }
       draw(); drawMini();
     }
@@ -423,15 +431,14 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     // --- LOOP
     function step(){
       try{
-        // Se autoChase attivo, pianifica percorso verso adiacenza al target
+        // Se autoChase attivo, pianifica percorso “furbo” verso adiacenza al target
         if(autoChase && target){
-          // se target non esiste più (rimosso) → spegni
+          // target ancora presente?
           var stillThere=false; for(var te=0; te<enemies.length; te++){ if(enemies[te]===target){ stillThere=true; break; } }
           if(!stillThere){ autoChase=false; target=null; }
-
-          // se non adiacente, crea (o rinfresca) path verso adiacenza
+          // se non adiacente e non ho già un path → calcola
           if(target && chebyshev(player,target)!==1 && pathQueue.length===0){
-            var pAdj=bfsToAdjacency(player.x,player.y,target.x,target.y);
+            var pAdj=bfsToAdjacencySmart(player.x,player.y,target.x,target.y,target.type);
             if(pAdj && pAdj.length) pathQueue=pAdj;
           }
           // se adiacente e CD pronto → attacca
@@ -552,7 +559,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       for(var eI=0;eI<enemies.length;eI++){ var en=enemies[eI];
         drawActor(en.x,en.y, en.type==='ranged' ? '#a855f7' : getVar('--enemy'));
         drawHpBar(en.x,en.y,en.hp,en.maxHp,true, (target===en));
-        if(target===en) drawTargetRing(en.x,en.y);
+        if(target===en){ drawTargetRing(en.x,en.y); if(autoChase) drawAutoBadge(en.x,en.y); }
       }
       // player
       drawActor(player.x,player.y,getVar('--player'));
@@ -592,6 +599,15 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       var x=tx*TILE+TILE/2, y=ty*TILE+TILE/2;
       ctx.save();
       ctx.strokeStyle='#ef4444'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(x,y,28,0,Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
+    function drawAutoBadge(tx,ty){
+      var x=tx*TILE+TILE/2+22, y=ty*TILE+TILE/2-26;
+      ctx.save();
+      ctx.fillStyle='rgba(15,23,42,.9)'; ctx.fillRect(x-16,y-10,32,18);
+      ctx.strokeStyle='#f87171'; ctx.strokeRect(x-16.5,y-10.5,33,19);
+      ctx.fillStyle='#f87171'; ctx.font='bold 11px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('AUTO', x, y);
       ctx.restore();
     }
     function drawXpBar(){
