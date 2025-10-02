@@ -331,6 +331,8 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   try{
     // ===== Dati runtime =====
     var lootBags=[]; var nextItemId=1;
+    var lootSuppress = { id:null, until:0 };
+function bagKey(b){ return b.x+','+b.y; }
     var teleportGuardUntil = 0; // protezione anti-teletrasporto immediato
 
     // Inventario & equip
@@ -603,23 +605,35 @@ if (WORLD.current === 'main') {
 
     // UTILS
     function inside(x,y){ return x>=0&&y>=0&&x<COLS&&y<ROWS; }
-    function walkable(x,y){ return inside(x,y)&&map[y][x]===0; }
-    function manhattan(a,b){ return Math.abs(a.x-b.x)+Math.abs(a.y-b.y); }
+    function -    function walkable(x,y){ return inside(x,y)&&map[y][x]===0; }
++    function walkable(x,y){
++      if (!inside(x,y)) return false;
++      if (map[y][x]!==0) return false;
++      if (isPortalTile(WORLD.current, x, y)) return false;
++      return true;
++    }
     function chebyshev(a,b){ var dx=Math.abs(a.x-b.x), dy=Math.abs(a.y-b.y); return dx>dy?dx:dy; }
     function rndInt(a,b){ return a+((Math.random()*(b-a+1))|0); }
     function getVar(n){ var cs = window.getComputedStyle(document.documentElement); return cs.getPropertyValue(n).trim(); }
     function rollCrit(chance){ return Math.random() < (chance||0); }
 
-    function tileFree(x,y){
-      if(map[y][x]!==0) return false;
-      var i;
-      if(x===player.x && y===player.y) return false;
-      for(i=0;i<enemies.length;i++){ if(enemies[i].x===x && enemies[i].y===y) return false; }
-      for(i=0;i<coins.length;i++){ if(coins[i].x===x && coins[i].y===y) return false; }
-      for(i=0;i<potions.length;i++){ if(potions[i].x===x && potions[i].y===y) return false; }
-      if(Array.isArray(lootBags)){ for(i=0;i<lootBags.length;i++){ if(lootBags[i].x===x && lootBags[i].y===y) return false; } }
-      return true;
-    }
+   -    function tileFree(x,y){
+-      if(map[y][x]!==0) return false;
+-      var i;
+-      if(x===player.x && y===player.y) return false;
+-      for(i=0;i<enemies.length;i++){ if(enemies[i].x===x && enemies[i].y===y) return false; }
+-      for(i=0;i<coins.length;i++){ if(coins[i].x===x && coins[i].y===y) return false; }
+-      for(i=0;i<potions.length;i++){ if(potions[i].x===x && potions[i].y===y) return false; }
+-      if(Array.isArray(lootBags)){ for(i=0;i<lootBags.length;i++){ if(lootBags[i].x===x && lootBags[i].y===y) return false; } }
+-      return true;
+-    }
++    function tileFree(x,y){
++      if(map[y][x]!==0) return false;
++      if(x===player.x && y===player.y) return false;
++      for(var i=0;i<enemies.length;i++){ if(enemies[i].x===x && enemies[i].y===y) return false; }
++      // gli oggetti a terra non bloccano
++      return true;
++    }
     function randEmpty(){ for(var k=0;k<500;k++){ var x=(Math.random()*COLS|0), y=(Math.random()*ROWS|0); if(inside(x,y) && tileFree(x,y)) return {x:x,y:y}; } return {x:2,y:2}; }
 
     // PATHFIND + helpers (brevi)
@@ -778,8 +792,16 @@ if (WORLD.current === 'main') {
       flashCircle(player.x,player.y, '#ff0000', 0.25, 26);
       logDmg('Subisci '+amount+' danni.');
       if(isCasting) cancelCast('Interrotto dal danno');
-      if(player.hp===0) gameOver();
-    }
+      if(player.hp===0) -    function gameOver(){ alert('Sei stato sconfitto! Respawn al punto iniziale (niente perdita XP/livello).'); player.hp=player.maxHp; player.x=1; player.y=1; autoChase=false; }
++    function gameOver(){
++      toast('Sei stato sconfitto! Respawn tra un attimo…');
++      setTimeout(function(){
++        player.hp=player.maxHp;
++        player.x=1; player.y=1;
++        autoChase=false; pathQueue=[];
++        draw(); drawMini(); updateTargetFrame();
++      }, 600);
++    }
 
     function usePotion(){
       if(player.pots<=0||player.hp>=player.maxHp) return;
@@ -850,6 +872,13 @@ if (WORLD.current === 'main') {
 
     function openLootIfAny(){
       var bag = getBagAt(player.x, player.y);
+         var bag = getBagAt(player.x, player.y);
+   if(!bag) { btnLoot.style.display='none'; return; }
++  var key = bagKey(bag);
++  if (lootSuppress.id === key && performance.now() < lootSuppress.until) {
++    btnLoot.style.display='block'; // mostra solo il pulsante, niente auto-popup
++    return;
++  }
       if(!bag) { btnLoot.style.display='none'; return; }
       btnLoot.style.display='block';
 
@@ -917,7 +946,12 @@ if (WORLD.current === 'main') {
       return bag.items.length===0;
     }
 
-    lootClose.addEventListener('click', function(){ lootWin.classList.add('hidden'); }, false);
+    -    lootClose.addEventListener('click', function(){ lootWin.classList.add('hidden'); }, false);
++    lootClose.addEventListener('click', function(){
++      var bag = getBagAt(player.x, player.y);
++      if (bag) { lootSuppress = { id:bagKey(bag), until: performance.now()+2000 }; }
++      lootWin.classList.add('hidden');
++    }, false);
     lootTakeAll.addEventListener('click', function(){
       var bag=getBagAt(player.x,player.y); if(!bag) return;
       while(bag.items.length){ applyItem(bag.items.shift()); }
@@ -1116,10 +1150,17 @@ if (WORLD.current === 'main') {
           return {x:b.x,y:b.y,items:b.items, ttlRemain:remain};
         });
         localStorage.setItem(SAVE_KEY, JSON.stringify({
-          map:map, player:player, enemies:enemies, coins:coins, potions:potions, projectiles:projectiles,
-          lootBags:bags, nextItemId:nextItemId, inventory:inventory, equipped:equipped,
-          lastCast:lastCast, hotbar:hotbar
-        }));
+          -        localStorage.setItem(SAVE_KEY, JSON.stringify({
+-          map:map, player:player, enemies:enemies, coins:coins, potions:potions, projectiles:projectiles,
+-          lootBags:bags, nextItemId:nextItemId, inventory:inventory, equipped:equipped,
+-          lastCast:lastCast, hotbar:hotbar
+-        }));
++        localStorage.setItem(SAVE_KEY, JSON.stringify({
++          map:map, player:player, enemies:enemies, coins:coins, potions:potions, projectiles:projectiles,
++          lootBags:bags, nextItemId:nextItemId, inventory:inventory, equipped:equipped,
++          lastCast:lastCast, hotbar:hotbar,
++          world: WORLD.current
++        }));
         localStorage.setItem(QUEST_KEY, JSON.stringify({currentQuest:currentQuest,quests:quests}));
         toast('Salvato.');
       }catch(e){ panic('save',e); }
@@ -1146,6 +1187,11 @@ if (WORLD.current === 'main') {
       equipped = d && d.equipped ? d.equipped : {weapon:null, armor:null};
       lastCast = d && d.lastCast ? d.lastCast : {};
       if(d && d.hotbar){ hotbar=d.hotbar; for(var s=1;s<=5;s++){ capEls[s].textContent = hotbar[s] ? (hotbar[s].icon||'—') : '—'; } }
+      +      // Ripristina mondo e tema se salvati
++      if (d && d.world) {
++        WORLD.current = d.world;
++        applyTheme(WORLD.current==='main' ? THEMES.main : THEMES.spawn);
++      }
       recomputeStats(false);
       var qd = localStorage.getItem(QUEST_KEY); if(qd){ var qj=JSON.parse(qd); if(qj){ currentQuest=qj.currentQuest||0; if(qj.quests&&qj.quests.length){ quests[0].progress=qj.quests[0].progress||0; quests[0].status=qj.quests[0].status||'active'; } } }
       renderQuest(); updateHotbarCounts(); draw(); drawMini(); renderInventoryIfOpen(); updateTargetFrame(); updateDpsPanel(); renderAbilities();
@@ -1553,170 +1599,7 @@ checkPortalAndTeleport();
 })();
 </script>
 <!-- /PATCH-01 -->
-  <!-- ABIL-SIMPLE-PATCH: assegna abilità a hotbar e lanciale dagli slot (senza toccare inventario) -->
-<script>
-(function(){
-  const SLOT_IDS=[null,'slot1','slot2','slot3','slot4','slot5'];
-  const CAP_IDS =[null,'slotCap1','slotCap2','slotCap3','slotCap4','slotCap5'];
-  const $ = s => document.querySelector(s);
-  const $$ = s => Array.from(document.querySelectorAll(s));
-  function toast(msg){ try{ (window.statusEl||$('#status')).textContent='[ABIL] '+msg; }catch(e){} }
-
-  /* Picker minimale per scegliere slot 1..5 */
-  function ensurePicker(){
-    if($('#abilPick')) return;
-    const w=document.createElement('section');
-    w.id='abilPick';
-    w.style.cssText='position:fixed;inset:0;display:none;place-items:center;z-index:2000;background:rgba(0,0,0,.4)';
-    w.innerHTML=`<div style="background:#0f172a;border:1px solid #1f2a44;border-radius:12px;padding:12px;width:320px;max-width:90vw;box-shadow:0 18px 44px rgba(0,0,0,.45)">
-      <div style="font-weight:700;margin-bottom:8px">Scegli slot</div>
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
-        ${[1,2,3,4,5].map(n=>`<button class="pickS" data-s="${n}" style="padding:10px;background:#1e40af;border:1px solid #31406e;color:#fff;border-radius:10px">${n}</button>`).join('')}
-      </div>
-      <div style="text-align:right;margin-top:10px">
-        <button id="abilPickClose" style="padding:6px 10px;background:#26325a;border:1px solid #31406e;color:#fff;border-radius:8px">Annulla</button>
-      </div>
-    </div>`;
-    document.body.appendChild(w);
-    w.addEventListener('click', e=>{
-      const t=e.target;
-      if(t.id==='abilPickClose') w.style.display='none';
-      if(t.classList.contains('pickS')){ const s=+t.dataset.s; const cb=window._abilPickCb; window._abilPickCb=null; w.style.display='none'; if(cb) cb(s); }
-    }, false);
-  }
-  function openPicker(cb){ ensurePicker(); window._abilPickCb=cb; $('#abilPick').style.display='grid'; }
-
-  /* Binding sugli slot (dataset + icona) */
-  function setSlotBinding(slot, binding){ // {kind:'ability', icon, abId}
-    const el=document.getElementById(SLOT_IDS[slot]); const cap=document.getElementById(CAP_IDS[slot]);
-    if(!el||!cap) return;
-    el.dataset.kind='ability';
-    el.dataset.abId=binding.abId||'';
-    el.dataset.icon=binding.icon||'✨';
-    cap.textContent=binding.icon||'✨';
-  }
-
-  /* Trasforma le card abilità: aggiungi “→ Barra”, abilita drag opzionale e long-press */
-  function enhanceAbilitiesOnce(){
-    const grid = $('#abilGrid'); if(!grid) return;
-    $$('#abilGrid .abilItem').forEach(card=>{
-      if(card._abilDone) return;
-      const cap = card.querySelector('.cap');
-      let icon='✨'; if(cap){ const m=cap.textContent.trim().match(/^[^\w\s]/); if(m) icon=m[0]; }
-      const name=(cap?.textContent||'Abilità').trim();
-      const abId='ab_'+name.toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'');
-
-      // bottone → Barra
-      const row = card.querySelector('.row') || card;
-      if(!row.querySelector('.btnToBar')){
-        const btn=document.createElement('button');
-        btn.className='btn btnToBar';
-        btn.textContent='→ Barra';
-        btn.style.marginLeft='8px';
-        btn.addEventListener('click', ()=> openPicker(s=>{ setSlotBinding(s,{kind:'ability',icon,abId}); toast(`Abilità assegnata allo slot ${s}`); }), false);
-        row.appendChild(btn);
-      }
-
-      // drag (desktop) – opzionale
-      card.draggable=true;
-      card.addEventListener('dragstart', e=>{
-        e.dataTransfer.setData('text/plain', `ability:${abId}|icon:${encodeURIComponent(icon)}`);
-        e.dataTransfer.setDragImage(new Image(),0,0);
-      }, false);
-
-      // long-press (mobile)
-      (function(){
-        let tid=null;
-        card.addEventListener('touchstart', ()=>{ tid=setTimeout(()=> openPicker(s=>{ setSlotBinding(s,{kind:'ability',icon,abId}); toast(`Abilità assegnata allo slot ${s}`); }), 450); }, {passive:true});
-        card.addEventListener('touchend', ()=>{ if(tid){clearTimeout(tid);tid=null;} }, {passive:true});
-        card.addEventListener('touchmove', ()=>{ if(tid){clearTimeout(tid);tid=null;} }, {passive:true});
-      })();
-
-      card._abilDone = true;
-    });
-  }
-
-  /* Drop sugli slot + tap per lanciare abilità */
-  function enableSlotsOnce(){
-    for(let s=1;s<=5;s++){
-      const el=document.getElementById(SLOT_IDS[s]); if(!el) continue;
-
-      if(!el._abilDrop){
-        el.addEventListener('dragover', e=>{ e.preventDefault(); }, false);
-        el.addEventListener('drop', e=>{
-          e.preventDefault();
-          const data=e.dataTransfer.getData('text/plain')||'';
-          if(data.startsWith('ability:')){
-            const abId=(data.match(/ability:([^|]+)/)||[])[1];
-            const icon=decodeURIComponent((data.match(/icon:([^|]+)/)||[])[1]||'✨');
-            if(!abId) return;
-            setSlotBinding(s,{kind:'ability',icon,abId});
-            toast(`Abilità -> slot ${s}`);
-          }
-        }, false);
-        el._abilDrop=true;
-      }
-
-      if(!el._abilTap){
-        const handler=(e)=>{ e.preventDefault(); e.stopPropagation(); onSlotTapAbility(s); };
-        el.addEventListener('click', handler, true);
-        el.addEventListener('touchend', handler, {passive:false, capture:true});
-        el._abilTap=true;
-      }
-    }
-  }
-
-  /* Tap slot: lancia l’abilità assegnata simulando click su “Lancia” della card */
-  function onSlotTapAbility(slot){
-    const el=document.getElementById(SLOT_IDS[slot]); if(!el) return;
-    if((el.dataset.kind||'')!=='ability'){ return; }
-    const abId=el.dataset.abId; if(!abId) return;
-
-    const abilWin = $('#abilWin');
-    const wasHidden = abilWin ? abilWin.classList.contains('hidden') : true;
-
-    // Apri Abilità se è chiusa
-    if(wasHidden) $('#btnAbilities')?.click();
-
-    setTimeout(()=>{
-      const cards = $$('#abilGrid .abilItem');
-      // trova la card con lo stesso abId generato
-      const card = cards.find(c=>{
-        const cap=c.querySelector('.cap')?.textContent||'';
-        const id='ab_'+cap.toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'');
-        return id===abId;
-      }) || cards[0];
-
-      // clicca il bottone “Lancia” dentro la card (se c'è), altrimenti il primo .btn
-      let btn = card?.querySelector('.btn');
-      if(!btn){
-        btn = card?.querySelector('button');
-      }
-      btn?.click();
-
-      // richiudi se l’avevamo aperta noi
-      if(wasHidden) $('#abilClose')?.click();
-    }, 50);
-  }
-
-  /* Hook iniziali: una sola passata quando apri la finestra Abilità */
-  function init(){
-    ensurePicker();
-    enableSlotsOnce();
-
-    const abBtn = $('#btnAbilities');
-    if(abBtn && !abBtn._abilInit){
-      abBtn.addEventListener('click', ()=> setTimeout(enhanceAbilitiesOnce, 40), false);
-      abBtn._abilInit = true;
-    }
-    toast('Abilità → hotbar attivo (semplice)');
-  }
-
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
-})();
-</script>
-<!-- /ABIL-SIMPLE-PATCH -->
+  
 <!-- PATCH-ABIL-UX v5: zero flash garantito + slot non si svuota -->
 <script>
 (function(){
