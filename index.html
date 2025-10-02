@@ -355,7 +355,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     // --- MAPPA
     var COLS=15, ROWS=9, TILE=64;
     var map=[];
-buildMap('main'); // mappa iniziale = main
+
 
     // --- PLAYER / ENEMY
     var _eid=1; function giveId(e){ e.id=_eid++; return e; }
@@ -399,6 +399,7 @@ var WORLD = {
 
 // ricostruisce la mappa e (se serve) svuota/spawna elementi
 function buildMap(name){
+buildMap('main'); // mappa iniziale = main
   WORLD.current = name;
 
   // 1) palette visiva per distinguere le mappe (senza cambiare il tuo draw)
