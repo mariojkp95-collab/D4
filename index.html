@@ -630,6 +630,8 @@ function rndInt(a,b){ return a+((Math.random()*(b-a+1))|0); }
 function getVar(n){ var cs = window.getComputedStyle(document.documentElement); return cs.getPropertyValue(n).trim(); }
 function rollCrit(chance){ return Math.random() < (chance||0); }
 
+function manhattan(a,b){ return Math.abs(a.x-b.x)+Math.abs(a.y-b.y); }
+
 function tileFree(x,y){
   if(map[y][x]!==0) return false;
   if(x===player.x && y===player.y) return false;
@@ -788,12 +790,12 @@ function tileFree(x,y){
       draw(); drawMini();
     }
 
-    function takePlayerDamage(amount, label){
+ function takePlayerDamage(amount, label){
   player.hp = Math.max(0, player.hp - amount);
   addDmgText(player.x, player.y, label + amount, '#ff6b6b');
   flashCircle(player.x, player.y, '#ff0000', 0.25, 26);
   logDmg('Subisci ' + amount + ' danni.');
-  if(isCasting) cancelCast('Interrotto dal danno');
+  if (isCasting) cancelCast('Interrotto dal danno');
   if (player.hp === 0) gameOver();
 }
 
@@ -976,17 +978,26 @@ function tileFree(x,y){
 
     -    lootClose.addEventListener('click', function(){
   var bag = getBagAt(player.x, player.y);
-  if (bag) { lootSuppress = { id:bagKey(bag), until: performance.now()+2000 }; }
+  if (bag) { lootSuppress = { id: bagKey(bag), until: performance.now() + 2000 }; }
   lootWin.classList.add('hidden');
 }, false);
     lootTakeAll.addEventListener('click', function(){
   var bag = getBagAt(player.x, player.y);
   if(!bag) return;
 
-  // prendere tutto
-  while (bag.items.length) {
-    applyItem(bag.items.shift());
+  // prendi ogni item
+  while (bag.items.length){
+    applyItem(bag.items[0]);
+    bag.items.shift();
   }
+  lootBags.splice(lootBags.indexOf(bag),1);
+  lootWin.classList.add('hidden');
+  btnLoot.style.display='none';
+
+  updateHotbarCounts();
+  draw(); drawMini();
+}, false);
+
   // rimuovi il sacco e chiudi
   lootBags.splice(lootBags.indexOf(bag), 1);
   lootWin.classList.add('hidden');
@@ -1405,16 +1416,48 @@ checkPortalAndTeleport();
         // Loot
         var onBag = !!getBagAt(player.x, player.y);
         if(!onBag) btnLoot.style.display='none';
-        openLootIfAny();
+        function openLootIfAny(){
+  var bag = getBagAt(player.x, player.y);
+  if(!bag){ btnLoot.style.display='none'; return; }
 
-        updateDmgTexts();
-        draw();
-        drawAtkCooldown();
-        if(!miniWrap.classList.contains('hidden')) drawMini();
-        updateTargetFrame();
-        updateDpsPanel();
-      }catch(e){ panic('loop',e); }
+  // anti-riapertura immediata dopo chiusura
+  var key = bagKey(bag);
+  if (lootSuppress.id === key && performance.now() < lootSuppress.until) {
+    btnLoot.style.display='block'; // mostra solo il pulsante, niente auto-popup
+    return;
+  }
+
+  btnLoot.style.display='block';
+
+  // auto-raccolta se il sacco contiene solo monete/pozioni
+  var commonOnly = true;
+  for (var i = 0; i < bag.items.length; i++){
+    var t = bag.items[i].type;
+    if (t !== 'coin' && t !== 'potion') { commonOnly = false; break; }
+  }
+
+  if (commonOnly){
+    var beforeCoins = player.coins, beforePots = player.pots;
+    var emptied = autoPickupCommons(bag);
+    var coinsGained = player.coins - beforeCoins;
+    var potsGained  = player.pots  - beforePots;
+
+    if (emptied) { lootBags.splice(lootBags.indexOf(bag),1); btnLoot.style.display='none'; }
+    else { renderLoot(bag); lootWin.classList.remove('hidden'); }
+
+    updateHotbarCounts(); draw(); drawMini();
+    if (coinsGained || potsGained){
+      toast('Raccolto: ' + (coinsGained?('🪙 x'+coinsGained+' '):'') + (potsGained?('🍵 x'+potsGained):''));
+      if(coinsGained) logLoot('Monete +' + coinsGained);
+      if(potsGained)  logLoot('Pozioni +' + potsGained);
     }
+    return;
+  }
+
+  // altrimenti apri la finestra loot
+  renderLoot(bag);
+  lootWin.classList.remove('hidden');
+}
     function tryStepAlongPath(e){
       if(!e.path || !e.path.length) return;
       var nxt=e.path.shift();
