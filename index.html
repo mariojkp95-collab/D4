@@ -423,46 +423,43 @@ function findSafeExit(worldName, px, py){
   // Estrema ratio: rimani sul portale (verrà bloccato dal guard timer)
   return {x:px, y:py};
 }
-function buildMap(name){
-  WORLD.current = name;
 
-  // 1) palette visiva per distinguere le mappe (senza cambiare il tuo draw)
+// === THEME HELPERS (NEW) ===
+var THEMES = {
+  main:  { '--tileA':'#0e2a1e', '--tileB':'#123022' },
+  spawn: { '--tileA':'#1e1f3a', '--tileB':'#23264a' }
+};
+function applyTheme(vars){
   var root = document.documentElement.style;
-  if(name==='main'){
-    root.setProperty('--tileA', '#0e2a1e');
-    root.setProperty('--tileB', '#123022');
-  }else{ // spawn
-    root.setProperty('--tileA', '#1e1f3a'); // blu/viola
-    root.setProperty('--tileB', '#23264a');
-  }
-
-  // 2) ricrea la griglia: 0 = libero, 1 = blocco (come usi già)
-  map.length = 0;
-  for(var y=0;y<ROWS;y++){
-    var row=[];
-    for(var x=0;x<COLS;x++) row.push(0);
-    map.push(row);
-  }
-  // (Se vuoi ostacoli casuali SOLO in main)
-  if(name==='main'){
-  for(var i=0;i<16;i++){
-    var bx=(Math.random()*COLS|0), by=(Math.random()*ROWS|0);
-    // evita spawn/player e PORTALI
-    if((bx===1&&by===4)||(bx===COLS-2&&by===ROWS-2)) continue;
-    if(isPortalTile('main', bx, by)) continue; // <-- NUOVO
-    map[by][bx] = 1;
-  }
+  for (var k in vars) root.setProperty(k, vars[k]);
 }
 
-  // 3) popolazione nemici: NESSUN nemico nello spawn
-  enemies.length = name==='spawn' ? 0 : enemies.length;
-  if(name==='main' && enemies.length===0){
-    enemies.push(makeSlime(COLS-2,ROWS-2));
-    enemies.push(makeArcher(COLS-4,2));
+// === PURE MAP BUILDER (REPLACE) ===
+// Ritorna { map, themeVars } e basta.
+function buildMap(name){
+  var cols = COLS, rows = ROWS;
+
+  // griglia vuota: 0=libero, 1=blocco
+  var m = [];
+  for (var y=0; y<rows; y++){
+    var row = [];
+    for (var x=0; x<cols; x++) row.push(0);
+    m.push(row);
   }
 
-  // 4) pulizia raccolte: nello spawn niente monete/pozioni in giro
-  if(name==='spawn'){ coins.length=0; potions.length=0; projectiles.length=0; }
+  // ostacoli casuali SOLO in 'main', evitando portali e tile sensibili
+  if (name === 'main'){
+    for (var i=0; i<16; i++){
+      var bx=(Math.random()*cols|0), by=(Math.random()*rows|0);
+      // evita portali e due posizioni “note”
+      if (isPortalTile('main', bx, by)) continue;
+      if ((bx===1 && by===4) || (bx===cols-2 && by===rows-2)) continue;
+      m[by][bx] = 1;
+    }
+  }
+
+  var themeVars = (name==='main') ? THEMES.main : THEMES.spawn;
+  return { map: m, themeVars: themeVars };
 }
 
 // disegna i portali come tile viola (sopra i pavimenti, sotto gli entity)
@@ -491,12 +488,28 @@ function checkPortalAndTeleport(){
   for(var i=0;i<list.length;i++){ var p=list[i]; if(p.x===px && p.y===py){ hit=p; break; } }
   if(!hit) return;
 
-  // Cambia mappa
-  buildMap(hit.to);
+  // Cambia mappa (puro)
+var res = buildMap(hit.to);
+map = res.map;
+applyTheme(res.themeVars);
+WORLD.current = hit.to;
 
   // Esci su una casella adiacente sicura (non sul portale)
   var exit = findSafeExit(hit.to, hit.tx, hit.ty);
   player.x = exit.x; player.y = exit.y;
+  
+  // Pulizie/spawn minimi dipendenti dal mondo
+if (WORLD.current === 'spawn'){
+  // nello spawn: niente oggetti a terra, niente proiettili, niente nemici
+  coins.length = 0;
+  potions.length = 0;
+  projectiles.length = 0;
+  enemies.length = 0;
+} else if (WORLD.current === 'main' && enemies.length === 0){
+  // se entri in main e non ci sono nemici, creane 2 come prima
+  enemies.push(makeSlime(COLS-2, ROWS-2));
+  enemies.push(makeArcher(COLS-4, 2));
+}
 
   // Ferma eventuale path in corso e proteggi per ~0.45s
   if (Array.isArray(pathQueue)) pathQueue.length = 0;
@@ -510,8 +523,14 @@ function checkPortalAndTeleport(){
 // OGGETTI + PROIETTILI
 var coins=[], potions=[], projectiles=[];
 
-// inizializza la mappa iniziale
-buildMap('spawn');
+// inizializza la mappa iniziale in modo puro
+var initRes = buildMap('spawn');
+map = initRes.map;
+applyTheme(initRes.themeVars);
+WORLD.current = 'spawn';
+
+// nello spawn vogliamo nessun nemico attivo
+enemies.length = 0;
 
 // Popola oggetti iniziali SOLO nella mappa principale
 if (WORLD.current === 'main') {
