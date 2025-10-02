@@ -1696,206 +1696,195 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 })();
 </script>
 <!-- /PATCH-02b -->
-  <!-- HOTFIX-INV-LOOP: inventario non freeza più -->
+  <!-- INV-FREEZE-HOTFIX: disattiva observers e rende l'inventario safe -->
 <script>
 (function(){
-  // === Guard & observer locali (non tocco il resto del tuo codice) ===
-  let invObs = null, invGridRef = null, invGuard = false;
+  const SLOT_IDS=[null,'slot1','slot2','slot3','slot4','slot5'];
+  const CAP_IDS =[null,'slotCap1','slotCap2','slotCap3','slotCap4','slotCap5'];
+  const $=s=>document.querySelector(s);
+  const $$=s=>Array.from(document.querySelectorAll(s));
+  function toast(msg){ try{ (window.statusEl||$('#status')).textContent='[INV-FIX] '+msg; }catch(e){} }
 
-  function $(s){ return document.querySelector(s); }
-  function $all(s){ return Array.from(document.querySelectorAll(s)); }
-  function toast(msg){ try{ (window.statusEl||$('#status')).textContent='[HOTFIX] '+msg; }catch(e){} }
+  // Picker semplice per scegliere slot 1..5 (se non già presente)
+  function ensurePicker(){
+    if($('#invfixPicker')) return;
+    const w=document.createElement('section');
+    w.id='invfixPicker';
+    w.style.cssText='position:fixed;inset:0;display:none;place-items:center;z-index:2000;background:rgba(0,0,0,.4)';
+    w.innerHTML=`<div style="background:#0f172a;border:1px solid #1f2a44;border-radius:12px;padding:12px;width:320px;max-width:90vw;box-shadow:0 18px 44px rgba(0,0,0,.45)">
+      <div style="font-weight:700;margin-bottom:8px">Scegli slot</div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
+        ${[1,2,3,4,5].map(n=>`<button class="pickS" data-s="${n}" style="padding:10px;background:#1e40af;border:1px solid #31406e;color:#fff;border-radius:10px">${n}</button>`).join('')}
+      </div>
+      <div style="text-align:right;margin-top:10px">
+        <button id="invfixClose" style="padding:6px 10px;background:#26325a;border:1px solid #31406e;color:#fff;border-radius:8px">Annulla</button>
+      </div>
+    </div>`;
+    document.body.appendChild(w);
+    w.addEventListener('click',e=>{
+      const t=e.target;
+      if(t.id==='invfixClose') { w.style.display='none'; }
+      if(t.classList.contains('pickS')){ const s=+t.dataset.s; if(window._invfixPickCb){ const cb=window._invfixPickCb; window._invfixPickCb=null; w.style.display='none'; cb(s); } }
+    }, false);
+  }
+  function openPicker(cb){ ensurePicker(); window._invfixPickCb=cb; $('#invfixPicker').style.display='grid'; }
 
-  // Pausa l'observer mentre mutiamo il DOM per evitare loop
-  function mutateInv(fn){
-    if(invObs) invObs.disconnect();
-    try { fn(); } finally {
-      if(invGridRef) invObs.observe(invGridRef, {childList:true, subtree:true});
-    }
+  // Binding sugli slot (dataset + icona), non tocca la logica esistente
+  function setSlotBinding(slot, binding){ // {kind,icon,itemId?,abId?,type?}
+    const el=document.getElementById(SLOT_IDS[slot]); const cap=document.getElementById(CAP_IDS[slot]);
+    if(!el||!cap) return;
+    el.dataset.kind=binding.kind||''; el.dataset.icon=binding.icon||'';
+    el.dataset.itemId=binding.itemId||''; el.dataset.abId=binding.abId||''; el.dataset.type=binding.type||'';
+    cap.textContent=binding.icon||'—';
   }
 
-  // Inserisce/aggiorna in sicurezza la card "Pozione" (senza innescare loop)
-  function upsertPotionCardSafe(){
-    const grid = $('#invGrid'); if(!grid) return;
-    invGridRef = grid;
+  // Disattiva qualunque MutationObserver attaccato alla griglia inventario da patch precedenti
+  function killInventoryObservers(grid){
+    try{
+      if(grid._patch02Obs){ grid._patch02Obs.disconnect(); grid._patch02Obs=null; }
+      if(grid._patch02b){  grid._patch02b.disconnect();  grid._patch02b=null; }
+      if(grid._hotfix){    grid._hotfix.disconnect?.();  grid._hotfix=null; }
+    }catch(e){}
+  }
 
-    const cntEl = $('#cntPot');
-    const qty = cntEl ? (parseInt(cntEl.textContent.trim(),10)||0) : 0;
+  // Inserisce/aggiorna UNA SOLA VOLTA la card Pozione, senza observers
+  function upsertPotionCardOnce(){
+    const grid=$('#invGrid'); if(!grid) return;
+    killInventoryObservers(grid);
 
-    let card = grid.querySelector('[data-hotfix="potion"]');
-
-    // Aggiornamento testuale se esiste già
-    if(card){
-      const qv = card.querySelector('.qv');
-      if(qv && qv.textContent !== String(qty)) {
-        mutateInv(()=> { qv.textContent = String(qty); });
-      }
-      return;
-    }
-
-    // Creazione card solo se non c'è
-    mutateInv(()=>{
-      card = document.createElement('div');
-      card.className = 'invItem r-com';
-      card.setAttribute('data-hotfix','potion');
-      card.draggable = true;
-      card.innerHTML = `
-        <div class="cap">🍵 Pozione ×<span class="qv">${qty}</span></div>
-        <div class="row">
-          <button class="act use">Usa</button>
-          <button class="act tobar">→ Barra</button>
-        </div>
-      `;
-
-      // Drag (desktop)
-      card.addEventListener('dragstart', e=>{
-        e.dataTransfer.setData('text/plain', 'item:__potion__|type:potion|icon:%F0%9F%8D%B5');
+    const cnt=$('#cntPot'); const qty = cnt ? (parseInt(cnt.textContent.trim(),10)||0) : 0;
+    let card=grid.querySelector('[data-invfix="potion"]');
+    if(!card){
+      card=document.createElement('div');
+      card.className='invItem r-com';
+      card.setAttribute('data-invfix','potion');
+      card.draggable=true;
+      card.innerHTML=`<div class="cap">🍵 Pozione ×<span class="qv">${qty}</span></div>
+                      <div class="row">
+                        <button class="act use">Usa</button>
+                        <button class="act tobar">→ Barra</button>
+                      </div>`;
+      // drag desktop
+      card.addEventListener('dragstart',e=>{
+        e.dataTransfer.setData('text/plain','item:__potion__|type:potion|icon:%F0%9F%8D%B5');
         e.dataTransfer.setDragImage(new Image(),0,0);
-      }, false);
-
-      // Long-press (mobile) → scegli slot (usa il picker della PATCH-02b se presente)
+      },false);
+      // long-press mobile
       (function(){
         let tid=null;
-        card.addEventListener('touchstart', ()=>{
-          tid=setTimeout(()=>{
-            const picker = document.getElementById('patchPicker');
-            if(picker && typeof window.openPicker==='function'){
-              window.openPicker(s=> setSlotBindingSafe(s,{kind:'potion',icon:'🍵'}));
-            } else {
-              // fallback: metti in slot1 se manca picker
-              setSlotBindingSafe(1,{kind:'potion',icon:'🍵'});
-              toast('Pozione assegnata a slot 1 (fallback)');
-            }
-          }, 450);
-        }, {passive:true});
-        card.addEventListener('touchend', ()=>{ if(tid){clearTimeout(tid);tid=null;} }, {passive:true});
-        card.addEventListener('touchmove', ()=>{ if(tid){clearTimeout(tid);tid=null;} }, {passive:true});
+        card.addEventListener('touchstart',()=>{ tid=setTimeout(()=> openPicker(s=>setSlotBinding(s,{kind:'potion',icon:'🍵'})),450); },{passive:true});
+        card.addEventListener('touchend',()=>{ if(tid){clearTimeout(tid);tid=null;} },{passive:true});
+        card.addEventListener('touchmove',()=>{ if(tid){clearTimeout(tid);tid=null;} },{passive:true});
       })();
+      // bottoni
+      card.querySelector('.use').addEventListener('click',()=>{
+        document.getElementById('btnUsePotion')?.click(); // usa flusso ufficiale (così scatta anche il cooldown patch-01)
+        setTimeout(()=>{ const qv=card.querySelector('.qv'); if(qv&&cnt) qv.textContent=cnt.textContent.trim(); },60);
+      },false);
+      card.querySelector('.tobar').addEventListener('click',()=> openPicker(s=>{ setSlotBinding(s,{kind:'potion',icon:'🍵'}); toast('Pozione assegnata a slot '+s); }), false);
 
-      // Bottoni
-      card.querySelector('.use').addEventListener('click', ()=>{
-        document.getElementById('btnUsePotion')?.click(); // usa il flusso ufficiale
-        setTimeout(()=>{ 
-          const qv=card.querySelector('.qv'); 
-          if(qv && cntEl) qv.textContent = cntEl.textContent.trim(); 
-        }, 60);
-      }, false);
-
-      card.querySelector('.tobar').addEventListener('click', ()=>{
-        // Prova ad aprire il picker se esiste, altrimenti chiedi prompt semplice
-        if(typeof window.openPicker==='function'){
-          window.openPicker(s=> setSlotBindingSafe(s,{kind:'potion',icon:'🍵'}));
-        } else {
-          const s = +(prompt('Slot (1-5):','1')||'1');
-          setSlotBindingSafe(Math.min(5,Math.max(1,s)),{kind:'potion',icon:'🍵'});
-        }
-      }, false);
-
-      // Inserisci in cima all'inventario
       grid.insertBefore(card, grid.firstChild);
-    });
+    } else {
+      const qv=card.querySelector('.qv'); if(qv) qv.textContent=qty;
+    }
   }
 
-  // Rende trascinabili i consumabili esistenti UNA sola volta (senza loop)
-  function makeConsumablesDraggableSafe(){
-    const grid = $('#invGrid'); if(!grid) return;
-    $all('#invGrid .invItem').forEach(card=>{
-      if(card.getAttribute('data-hotfix')==='potion') return; // già gestita
-      if(card._hfDone) return;
-
-      const cap = card.querySelector('.cap');
-      const name = (cap?.textContent||'').toLowerCase();
+  // Rende trascinabili SOLO una volta i consumabili esistenti (niente observer)
+  function makeConsumablesDraggableOnce(){
+    $$('#invGrid .invItem').forEach(card=>{
+      if(card.getAttribute('data-invfix')==='potion') return;
+      if(card._invfixDone) return;
+      const cap=card.querySelector('.cap'); const name=(cap?.textContent||'').toLowerCase();
       const isConsum = name.includes('consum') || name.includes('pozione') || card.querySelector('.act');
       if(!isConsum) return;
-
-      // prima emoji come icona
+      // icona = prima emoji se c'è
       let icon='❖'; const m=(cap?.textContent||'').trim().match(/^[^\w\s]/); if(m) icon=m[0];
-      const encIcon = encodeURIComponent(icon);
-      // id pseudo stabile
-      let pid = card.getAttribute('data-id');
-      if(!pid){ pid='__it__'+Math.random().toString(36).slice(2); card.setAttribute('data-id',pid); }
+      const encIcon=encodeURIComponent(icon);
+      // id pseudo
+      let pid=card.getAttribute('data-id'); if(!pid){ pid='__it__'+Math.random().toString(36).slice(2); card.setAttribute('data-id',pid); }
 
-      mutateInv(()=>{
-        card.draggable = true;
-        card.addEventListener('dragstart', e=>{
-          e.dataTransfer.setData('text/plain', `item:${pid}|type:consumable|icon:${encIcon}`);
-          e.dataTransfer.setDragImage(new Image(),0,0);
-        }, false);
-
-        // long-press → scegli slot
+      card.draggable=true;
+      card.addEventListener('dragstart', e=>{
+        e.dataTransfer.setData('text/plain', `item:${pid}|type:consumable|icon:${encIcon}`);
+        e.dataTransfer.setDragImage(new Image(),0,0);
+      },false);
+      // long-press
+      (function(){
         let tid=null;
-        card.addEventListener('touchstart', ()=>{
-          tid=setTimeout(()=>{
-            if(typeof window.openPicker==='function'){
-              window.openPicker(s=> setSlotBindingSafe(s,{kind:'item',icon:icon,itemId:pid,type:'consumable'}));
-            }else{
-              const s = +(prompt('Slot (1-5):','1')||'1');
-              setSlotBindingSafe(Math.min(5,Math.max(1,s)),{kind:'item',icon:icon,itemId:pid,type:'consumable'});
-            }
-          },450);
-        }, {passive:true});
-        card.addEventListener('touchend', ()=>{ if(tid){clearTimeout(tid);tid=null;} }, {passive:true});
-        card.addEventListener('touchmove', ()=>{ if(tid){clearTimeout(tid);tid=null;} }, {passive:true});
-      });
-
-      card._hfDone = true;
+        card.addEventListener('touchstart',()=>{ tid=setTimeout(()=> openPicker(s=> setSlotBinding(s,{kind:'item',icon:icon,itemId:pid,type:'consumable'})),450); },{passive:true});
+        card.addEventListener('touchend',()=>{ if(tid){clearTimeout(tid);tid=null;} },{passive:true});
+        card.addEventListener('touchmove',()=>{ if(tid){clearTimeout(tid);tid=null;} },{passive:true});
+      })();
+      card._invfixDone=true;
     });
   }
 
-  // Bind visuale sicuro sugli slot (dataset + icona) — non tocco la tua activateSlot
-  function setSlotBindingSafe(slot, binding){
-    const slotEl = document.getElementById(['','slot1','slot2','slot3','slot4','slot5'][slot]);
-    const capEl  = document.getElementById(['','slotCap1','slotCap2','slotCap3','slotCap4','slotCap5'][slot]);
-    if(!slotEl || !capEl) return;
-    mutateInv(()=>{
-      slotEl.dataset.kind = binding.kind||'';
-      slotEl.dataset.icon = binding.icon||'';
-      slotEl.dataset.itemId = binding.itemId||'';
-      slotEl.dataset.abId = binding.abId||'';
-      slotEl.dataset.type = binding.type||'';
-      capEl.textContent = binding.icon||'—';
-    });
-  }
-
-  // Observer sicuro: batch con guard, niente re-entrancy
-  function attachSafeInventoryObserver(){
-    const grid = $('#invGrid'); if(!grid) return;
-    invGridRef = grid;
-
-    if(invObs) invObs.disconnect();
-    invObs = new MutationObserver(()=>{
-      if(invGuard) return;
-      invGuard = true;
-      requestAnimationFrame(()=>{
-        try{
-          upsertPotionCardSafe();
-          makeConsumablesDraggableSafe();
-        } finally {
-          invGuard = false;
-        }
-      });
-    });
-    invObs.observe(grid, {childList:true, subtree:true});
-
-    // Prima passata
-    upsertPotionCardSafe();
-    makeConsumablesDraggableSafe();
-  }
-
-  // Hook: quando apri l’inventario attiviamo l’observer sicuro
-  function init(){
-    const btn = document.getElementById('btnInventory');
-    if(btn && !btn._hotfix){
-      btn.addEventListener('click', ()=> setTimeout(attachSafeInventoryObserver, 20), false);
-      btn._hotfix = true;
+  // Slot: abilita drop e tap (se non già abilitati)
+  function enableSlotsOnce(){
+    for(let s=1;s<=5;s++){
+      const el=document.getElementById(SLOT_IDS[s]); if(!el) continue;
+      if(!el._invfixDrop){
+        el.addEventListener('dragover',e=>{ e.preventDefault(); },false);
+        el.addEventListener('drop',e=>{
+          e.preventDefault();
+          const data=e.dataTransfer.getData('text/plain')||'';
+          if(data.startsWith('item:')){
+            const type=(data.match(/type:([^|]+)/)||[])[1];
+            const icon=decodeURIComponent((data.match(/icon:([^|]+)/)||[])[1]||'❖');
+            if(type!=='potion' && type!=='consumable'){ toast('Solo consumabili/pozioni in barra'); return; }
+            setSlotBinding(s,{kind:(type==='potion'?'potion':'item'),icon,itemId:(data.match(/item:([^|]+)/)||[])[1]||'',type});
+            toast('Assegnato allo slot '+s);
+          }
+        },false);
+        el._invfixDrop=true;
+      }
+      if(!el._invfixTap){
+        const handler=(e)=>{ e.preventDefault(); e.stopPropagation();
+          const kind=el.dataset.kind||'';
+          if(kind==='potion'){ $('#btnUsePotion')?.click(); return; }
+          if(kind==='item'){ toast('Consumabile su slot '+s+'. Usa da inventario se non ha effetto diretto.'); return; }
+          if(kind==='ability'){ // appoggio: apri abilità e clicca "Lancia"
+            const wasHidden = $('#abilWin')?.classList.contains('hidden');
+            $('#btnAbilities')?.click();
+            setTimeout(()=>{
+              const cards=$$('#abilGrid .abilItem'); // scegli la prima
+              cards[0]?.querySelector('.btn')?.click();
+              if(wasHidden) $('#abilClose')?.click();
+            },40);
+            return;
+          }
+        };
+        el.addEventListener('click', handler, true);
+        el.addEventListener('touchend', handler, {passive:false, capture:true});
+        el._invfixTap=true;
+      }
     }
-    toast('Hotfix inventario attivo');
+  }
+
+  // Hook su “Inventario”: all’apertura facciamo UNA passata e basta (no observer)
+  function init(){
+    ensurePicker();
+    enableSlotsOnce();
+    const btn=$('#btnInventory');
+    if(btn && !btn._invfix){
+      btn.addEventListener('click', ()=>{
+        // aspetta che la finestra sia visibile e la griglia esista
+        setTimeout(()=>{
+          const grid=$('#invGrid'); if(!grid) return;
+          killInventoryObservers(grid);    // spegni patch/observer precedenti
+          upsertPotionCardOnce();          // inserisci/aggiorna pozione
+          makeConsumablesDraggableOnce();  // marca i consumabili esistenti
+        }, 30);
+      }, false);
+      btn._invfix=true;
+    }
+    toast('Inventario fix attivo');
   }
 
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
 </script>
-<!-- /HOTFIX-INV-LOOP -->
+<!-- /INV-FREEZE-HOTFIX -->
 </body>
 </html>
