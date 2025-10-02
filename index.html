@@ -1573,5 +1573,110 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 })();
 </script>
 <!-- /ABIL-SIMPLE-PATCH -->
+	<!-- PATCH-ABIL-UX: cast silenzioso + long-press per rimuovere abilità dagli slot -->
+<script>
+(function(){
+  const SLOT_IDS=[null,'slot1','slot2','slot3','slot4','slot5'];
+  const CAP_IDS =[null,'slotCap1','slotCap2','slotCap3','slotCap4','slotCap5'];
+  const $=s=>document.querySelector(s);
+  const $$=s=>Array.from(document.querySelectorAll(s));
+
+  /* 1) Evita il “flash” della finestra Abilità durante il cast da hotbar */
+  function ensureGhostCss(){
+    if($('#abilGhostStyle')) return;
+    const st=document.createElement('style');
+    st.id='abilGhostStyle';
+    st.textContent = `
+      /* finestra abilità "fantasma" durante il cast da hotbar */
+      .abil-ghost { opacity:0 !important; pointer-events:none !important; }
+    `;
+    document.head.appendChild(st);
+  }
+
+  // wrapper: lancia abilità senza mostrare visivamente la finestra
+  function castAbilitySilently(abId){
+    const abilWin = $('#abilWin');
+    const btnAbilities = $('#btnAbilities');
+    if(!btnAbilities) return;
+
+    ensureGhostCss();
+
+    const wasHidden = abilWin ? abilWin.classList.contains('hidden') : true;
+    if(abilWin) abilWin.classList.add('abil-ghost');       // rende invisibile
+
+    if(wasHidden) btnAbilities.click();                    // apre la finestra (invisibile)
+
+    setTimeout(()=>{
+      const cards = $$('#abilGrid .abilItem');
+      const card = cards.find(c=>{
+        const cap=c.querySelector('.cap')?.textContent||'';
+        const id='ab_'+cap.toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'');
+        return id===abId;
+      }) || cards[0];
+
+      const btn = card?.querySelector('.btnCast') || card?.querySelector('.btn');
+      btn?.click();                                        // clicca "Lancia"
+
+      if(wasHidden) $('#abilClose')?.click();              // richiudi se l'avevamo aperta
+      if(abilWin) abilWin.classList.remove('abil-ghost');  // torna visibile per usi normali
+    }, 40);
+  }
+
+  /* 2) Long-press sugli slot per rimuovere l’abilità assegnata */
+  function enableSlotLongPressRemove(){
+    for(let s=1;s<=5;s++){
+      const el=document.getElementById(SLOT_IDS[s]); if(!el) continue;
+      if(el._abilUxLP) continue; el._abilUxLP=true;
+
+      let tid=null, moved=false;
+
+      const start=()=>{ moved=false; tid=setTimeout(()=>{ // dopo 600ms: rimuovi binding
+        if((el.dataset.kind||'')==='ability'){
+          el.dataset.kind=''; el.dataset.abId=''; el.dataset.icon='';
+          const cap=document.getElementById(CAP_IDS[s]); if(cap) cap.textContent='—';
+          const status=$('#status'); if(status) status.textContent='[ABIL] Slot '+s+' svuotato';
+        }
+      }, 600); };
+
+      const cancel=()=>{ if(tid){ clearTimeout(tid); tid=null; } };
+
+      el.addEventListener('touchstart', start, {passive:true});
+      el.addEventListener('touchend', cancel, {passive:true});
+      el.addEventListener('touchmove', ()=>{ moved=true; cancel(); }, {passive:true});
+
+      // anche su desktop: long-press via mouse
+      el.addEventListener('mousedown', (e)=>{ if(e.button!==0) return; start(); });
+      ['mouseup','mouseleave'].forEach(ev=> el.addEventListener(ev, cancel));
+    }
+  }
+
+  /* 3) Intercetta i tap sugli slot abilità per usare il cast silenzioso */
+  function hookSlotCasts(){
+    for(let s=1;s<=5;s++){
+      const el=document.getElementById(SLOT_IDS[s]); if(!el) continue;
+      if(el._abilUxTap) continue; el._abilUxTap=true;
+
+      const handler=(e)=>{
+        // se era un long-press, il timeout ha già svuotato: non fare altro
+        // in ogni caso, blocchiamo il flash: usiamo il cast silenzioso
+        if((el.dataset.kind||'')==='ability'){
+          e.preventDefault(); e.stopPropagation();
+          castAbilitySilently(el.dataset.abId);
+        }
+      };
+      el.addEventListener('click', handler, true);
+      el.addEventListener('touchend', handler, {passive:false, capture:true});
+    }
+  }
+
+  function init(){
+    enableSlotLongPressRemove();
+    hookSlotCasts();
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+<!-- /PATCH-ABIL-UX -->
 </body>
 </html>
