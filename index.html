@@ -352,92 +352,10 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     var lastCast = {}; // id -> ts
     var isCasting=false, castStart=0, currentCasting=null;
 
- // === WORLD / MAP MANAGER ===
-const WORLD = {
-  current: 'main', // 'main' o 'spawn'
-  portals: {
-    main:  [ { x: 2,  y: 5,  to: 'spawn', tx: 22, ty: 5 } ],  // entra qui -> vai allo spawn
-    spawn: [ { x: 22, y: 5,  to: 'main',  tx: 3,  ty: 5 } ]   // esci dallo spawn -> torna in main
-  }
-};
-
-// se nel tuo codice “map” e “state.mobs/coins” esistono già, queste funzioni li riusano
-function buildMap(name){
-  WORLD.current = name;
-
-  // 1) ricostruisci la scacchiera (usa il tuo schema colori se diverso)
-  if (typeof map !== 'undefined') {
-    map.length = 0; // reset
-    const rows = (typeof state !== 'undefined' ? state.rows : Math.floor(game.rows||14));
-    const cols = (typeof state !== 'undefined' ? state.cols : Math.floor(game.cols||25));
-    for(let y=0;y<rows;y++){
-      const row=[];
-      for(let x=0;x<cols;x++){
-        // colori leggermente diversi per distinguere le mappe
-        if(name==='main'){
-          row.push( ((x+y)&1)?'#0e2a1e':'#123022' ); // verde scuro
-        }else{
-          row.push( ((x+y)&1)?'#1e1f3a':'#23264a' ); // blu violaceo per lo SPWN
-        }
-      }
-      map.push(row);
-    }
-  }
-
-  // 2) mob: nessun mob in spawn
-  if (typeof state !== 'undefined' && Array.isArray(state.mobs)) {
-    if(name==='spawn'){
-      state.mobs.length = 0; // svuota completamente
-    }else{
-      // lascia com'è (o, se vuoi, respawna se vuoto)
-      if(state.mobs.length===0 && typeof spawnMob==='function'){
-        for(let i=0;i<6;i++) spawnMob();
-      }
-    }
-  }
-
-  // 3) monete: opzionale → pulisci quando entri in spawn
-  if (typeof state !== 'undefined' && Array.isArray(state.coins)) {
-    if(name==='spawn') state.coins.length = 0;
-  }
-}
-
-// disegno portali (un tile “portale” per mappa)
-function drawPortals(ctx, tileSize){
-  const list = WORLD.portals[WORLD.current] || [];
-  ctx.save();
-  for(const p of list){
-    ctx.fillStyle = '#7c3aed'; // viola portale
-    ctx.globalAlpha = 0.9;
-    ctx.fillRect(p.x*tileSize+4, p.y*tileSize+4, tileSize-8, tileSize-8);
-    // alone
-    ctx.globalAlpha = 0.35;
-    ctx.fillRect(p.x*tileSize+2, p.y*tileSize+2, tileSize-4, tileSize-4);
-    ctx.globalAlpha = 1;
-  }
-  ctx.restore();
-}
-
-// teletrasporto se il player è sopra un portale
-function checkPortalAndTeleport(){
-  if (typeof state === 'undefined') return;
-  const px = state.player.x, py = state.player.y;
-  const list = WORLD.portals[WORLD.current] || [];
-  const hit = list.find(p => p.x===px && p.y===py);
-  if(!hit) return;
-
-  // teleporto
-  buildMap(hit.to);
-  // posiziona il player nella casella di arrivo
-  state.player.x = hit.tx;
-  state.player.y = hit.ty;
-
-  // pulizia “sicura” dell’eventuale path in corso
-  if (state.clickPath && state.clickPath.length) state.clickPath.length = 0;
-
-  // feedback
-  if (typeof log === 'function') log(`Teletrasporto: ${WORLD.current.toUpperCase()}`);
-}
+    // --- MAPPA
+    var COLS=15, ROWS=9, TILE=64;
+    var map=[];
+buildMap('main'); // mappa iniziale = main
 
     // --- PLAYER / ENEMY
     var _eid=1; function giveId(e){ e.id=_eid++; return e; }
@@ -469,7 +387,88 @@ function checkPortalAndTeleport(){
       });
     }
     var enemies=[ makeSlime(COLS-2,ROWS-2), makeArcher(COLS-4,2) ];
+// === WORLD / MAP MANAGER (non distruttivo) ===
+var WORLD = {
+  current: 'main', // 'main' o 'spawn'
+  // Con COLS=15, ROWS=9 → portale sinistra in main, destra in spawn
+  portals: {
+    main:  [ { x: 1,  y: 4,  to: 'spawn', tx: 13, ty: 4 } ],
+    spawn: [ { x: 13, y: 4,  to: 'main',  tx: 1,  ty: 4 } ]
+  }
+};
 
+// ricostruisce la mappa e (se serve) svuota/spawna elementi
+function buildMap(name){
+  WORLD.current = name;
+
+  // 1) palette visiva per distinguere le mappe (senza cambiare il tuo draw)
+  var root = document.documentElement.style;
+  if(name==='main'){
+    root.setProperty('--tileA', '#0e2a1e');
+    root.setProperty('--tileB', '#123022');
+  }else{ // spawn
+    root.setProperty('--tileA', '#1e1f3a'); // blu/viola
+    root.setProperty('--tileB', '#23264a');
+  }
+
+  // 2) ricrea la griglia: 0 = libero, 1 = blocco (come usi già)
+  map.length = 0;
+  for(var y=0;y<ROWS;y++){
+    var row=[];
+    for(var x=0;x<COLS;x++) row.push(0);
+    map.push(row);
+  }
+  // (Se vuoi ostacoli casuali SOLO in main)
+  if(name==='main'){
+    for(var i=0;i<16;i++){
+      var bx=(Math.random()*COLS|0), by=(Math.random()*ROWS|0);
+      if((bx===1&&by===4)||(bx===COLS-2&&by===ROWS-2)) continue; // evita spawn/player
+      map[by][bx] = 1;
+    }
+  }
+
+  // 3) popolazione nemici: NESSUN nemico nello spawn
+  enemies.length = name==='spawn' ? 0 : enemies.length;
+  if(name==='main' && enemies.length===0){
+    enemies.push(makeSlime(COLS-2,ROWS-2));
+    enemies.push(makeArcher(COLS-4,2));
+  }
+
+  // 4) pulizia raccolte: nello spawn niente monete/pozioni in giro
+  if(name==='spawn'){ coins.length=0; potions.length=0; projectiles.length=0; }
+}
+
+// disegna i portali come tile viola (sopra i pavimenti, sotto gli entity)
+function drawPortals(ctx, tileSize){
+  var list = WORLD.portals[WORLD.current] || [];
+  ctx.save();
+  for(var i=0;i<list.length;i++){
+    var p=list[i];
+    ctx.fillStyle = '#7c3aed';
+    ctx.globalAlpha = 0.95;
+    ctx.fillRect(p.x*tileSize+6, p.y*tileSize+6, tileSize-12, tileSize-12);
+    ctx.globalAlpha = 0.35;
+    ctx.fillRect(p.x*tileSize+3, p.y*tileSize+3, tileSize-6, tileSize-6);
+  }
+  ctx.restore();
+}
+
+// se il player entra nel portale → teletrasporto
+function checkPortalAndTeleport(){
+  var px = player.x, py = player.y;
+  var list = WORLD.portals[WORLD.current] || [];
+  var hit = null;
+  for(var i=0;i<list.length;i++){ var p=list[i]; if(p.x===px && p.y===py){ hit=p; break; } }
+  if(!hit) return;
+
+  buildMap(hit.to);
+  player.x = hit.tx; player.y = hit.ty;
+  // Interrompi eventuale path in corso
+  if(Array.isArray(pathQueue)) pathQueue.length = 0;
+
+  logSys('Teletrasporto: ' + (WORLD.current==='spawn'?'Spawn':'Main'));
+  draw(); drawMini();
+}
     // OGGETTI + PROIETTILI
     var coins=[], potions=[], projectiles=[];
     for(var i1=0;i1<4;i1++) coins.push(randEmpty());
@@ -1123,7 +1122,7 @@ function checkPortalAndTeleport(){
           for(i=0;i<enemies.length;i++){ if(enemies[i].x===next.x&&enemies[i].y===next.y){ blocked=true; break; } }
           if(!blocked){ player.x=next.x; player.y=next.y; } else pathQueue=[];
         }
-
+checkPortalAndTeleport();
         // Enemy AI
         var now=performance.now();
         for(var j=0;j<enemies.length;j++){
@@ -1263,6 +1262,7 @@ function checkPortalAndTeleport(){
         ctx.fillStyle = (map[y][x]===1)?getVar('--block'):(((x+y)%2===0)?getVar('--tileA'):getVar('--tileB'));
         ctx.fillRect(x*TILE,y*TILE,TILE,TILE);
       }
+      drawPortals(ctx, TILE);
       ctx.fillStyle=getVar('--coin');
       for(var i=0;i<coins.length;i++){ var c=coins[i]; var cx=c.x*TILE+TILE/2, cy=c.y*TILE+TILE/2; ctx.beginPath(); ctx.arc(cx,cy,10,0,Math.PI*2); ctx.fill(); }
       for(var k=0;k<potions.length;k++){ var po=potions[k]; var px=po.x*TILE, py=po.y*TILE;
