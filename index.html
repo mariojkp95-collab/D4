@@ -480,11 +480,24 @@ function drawPortals(ctx, tileSize){
 }
 
 // se il player entra nel portale → teletrasporto
-function checkPortalAndTeleport(){
+
+// ... dopo il blocco "movimento su path"
+var movedThisTick = (player.x !== lastPlayerX || player.y !== lastPlayerY);
+
+// === Portali (solo quando entri nella casella in questo tick) ===
+checkPortalAndTeleport(movedThisTick);
+
+// aggiorna “last” a fine tick
+lastPlayerX = player.x; 
+lastPlayerY = player.y;
+
+function checkPortalAndTeleport(justEntered){
+  if(!justEntered) return; // <<— NOVITÀ: non triggerare se non hai appena fatto il passo dentro
   var now = performance.now();
-  if (now < teleportGuardUntil) return; // evita retrigger immediato
+  if (now < teleportGuardUntil) return;
 
   var px = player.x, py = player.y;
+ 
   var list = WORLD.portals[WORLD.current] || [];
   var hit = null;
   for(var i=0;i<list.length;i++){ var p=list[i]; if(p.x===px && p.y===py){ hit=p; break; } }
