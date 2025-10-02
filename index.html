@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Drakoria — MAGNET-1-FULL</title>
+<title>Drakoria — HUD-1</title>
 <style>
 :root{
   --bg:#0b1224; --panel:#0f172a; --stroke:#1f2a44; --text:#e5e7eb; --muted:#9ca3af;
@@ -19,8 +19,6 @@ header button:hover{filter:brightness(1.05)}
 main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);border:1px solid var(--stroke);border-radius:12px;position:relative}
 #game{display:block;width:100%;height:auto;border-radius:10px;border:1px solid var(--stroke);background:#0a1630;image-rendering:pixelated;touch-action:manipulation}
 .help{margin:.6rem 0 0;color:#a1a1aa}
-.help .coin{color:var(--coin);font-weight:700}
-.help .potion{color:#a78bfa;font-weight:700}
 #status{margin-top:8px;color:var(--muted)}
 .fab{position:fixed;bottom:14px;width:56px;height:56px;border-radius:50%;border:1px solid #31406e;background:var(--accent);color:#fff;font-size:24px;line-height:56px;text-align:center;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:20}
 #btnUsePotion{ right:14px }
@@ -89,6 +87,21 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 .invItem .act{font-size:12px;padding:6px 8px;border:1px solid #31406e;background:#1e40af;color:#fff;border-radius:8px;cursor:pointer}
 .badge{font:700 11px system-ui;color:#93c5fd}
 .eqName{color:#e5e7eb;font-weight:600}
+
+/* Target Frame */
+.tframe{position:fixed; left:50%; top:8px; transform:translateX(-50%); min-width:240px; max-width:80vw;
+  background:rgba(15,23,42,.9); border:1px solid #1f2a44; border-radius:12px; padding:8px 10px; z-index:26; backdrop-filter: blur(3px); display:none}
+.trow{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:6px}
+.tname{font-weight:700}
+.tkind{color:#9ca3af; font-size:12px}
+.thp{height:10px; background:#0b1224; border:1px solid #1f2a44; border-radius:6px; overflow:hidden}
+.thp>div{height:100%; width:0%; background:#ef4444}
+.thpTxt{font-size:12px; margin-top:4px; color:#e5e7eb}
+
+/* DPS panel */
+.dps{position:fixed; left:16px; top:16px; background:rgba(15,23,42,.9); border:1px solid #1f2a44; border-radius:10px; padding:8px 10px; z-index:26}
+.dps .h{font-weight:700; margin-bottom:4px}
+.dps .v{color:#e5e7eb}
 </style>
 </head>
 <body>
@@ -107,19 +120,22 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 <main>
   <canvas id="game" width="960" height="576" aria-label="Gioco"></canvas>
   <p class="help">
-    Tap per muoverti • tap su un <b>nemico</b> per selezionarlo • <b>doppio tap</b> per <b>auto-inseguire</b> •
+    Tap per muoverti • tap su un <b>nemico</b> per selezionarlo (Target Frame) • <b>doppio tap</b> per <b>auto-inseguire</b> •
     <b>🗡️</b> / SPAZIO attacca • Entra su un <b>sacco</b> per loot.
   </p>
   <div id="status"></div>
 </main>
 
+<!-- HUD buttons -->
 <button id="btnAttack" class="fab" aria-label="Attacca">🗡️</button>
 <canvas id="atkCdCanvas" width="56" height="56" aria-hidden="true"></canvas>
 <button id="btnUsePotion" class="fab" aria-label="Usa pozione">🍵</button>
 <button id="btnLoot" class="fab" aria-label="Apri loot">👜</button>
 
+<!-- Mini mappa -->
 <div id="miniWrap" class="hidden"><canvas id="mini" width="80" height="48" aria-label="Mini mappa"></canvas></div>
 
+<!-- Hotbar -->
 <div class="hotbar" id="hotbar">
   <div class="slot" id="slot1"><span class="lbl">1</span>🍵<span class="cnt" id="cntPot">0</span></div>
   <div class="slot"><span class="lbl">2</span>—</div>
@@ -128,17 +144,20 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   <div class="slot"><span class="lbl">5</span>—</div>
 </div>
 
+<!-- Quest -->
 <aside id="questPanel" class="quest hidden" aria-live="polite">
   <div class="q-header"><span>Quest</span><button id="btnQuestClose" class="q-close" aria-label="Chiudi">×</button></div>
   <div id="questBody" class="q-body"></div>
 </aside>
 
+<!-- Loot -->
 <section id="lootWin" class="loot hidden" role="dialog" aria-modal="true" aria-label="Bottino">
   <div class="loot-h"><span>Bottino</span><button id="lootClose" class="loot-x">×</button></div>
   <div id="lootBody" class="loot-b"></div>
   <div class="loot-f"><button id="lootTakeAll" class="btn">Prendi tutto</button></div>
 </section>
 
+<!-- Inventory -->
 <section id="invWin" class="inv hidden" role="dialog" aria-modal="true" aria-label="Inventario">
   <div class="inv-h"><span>Inventario</span><button id="invClose" class="inv-x">×</button></div>
   <div class="inv-body">
@@ -156,12 +175,30 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   </div>
 </section>
 
+<!-- Target Frame + DPS -->
+<div id="tframe" class="tframe" aria-live="polite">
+  <div class="trow">
+    <div>
+      <div id="tfName" class="tname">—</div>
+      <div id="tfKind" class="tkind">—</div>
+    </div>
+    <div id="tfDist" class="tkind">—</div>
+  </div>
+  <div class="thp"><div id="tfHpBar"></div></div>
+  <div id="tfHpTxt" class="thpTxt">—</div>
+</div>
+
+<div id="dpsPanel" class="dps">
+  <div class="h">DPS</div>
+  <div class="v" id="dpsText">0 (picco 0)</div>
+</div>
+
 <div id="errBox" class="err" style="display:none"></div>
 
 <script>
-/* ===== Drakoria — BUILD MAGNET-1-FULL ===== */
+/* ===== Drakoria — BUILD HUD-1 ===== */
 (function(){
-  var BUILD='MAGNET-1-FULL';
+  var BUILD='HUD-1';
   var SAVE_KEY='save_xrq1_inv';
   var QUEST_KEY='quests_xrq1_inv';
 
@@ -181,6 +218,14 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   var lootWin=document.getElementById('lootWin'), lootBody=document.getElementById('lootBody'), lootClose=document.getElementById('lootClose'), lootTakeAll=document.getElementById('lootTakeAll');
   var btnLoot=document.getElementById('btnLoot');
 
+  // Target Frame refs
+  var tframe=document.getElementById('tframe'), tfName=document.getElementById('tfName'), tfKind=document.getElementById('tfKind');
+  var tfHpBar=document.getElementById('tfHpBar'), tfHpTxt=document.getElementById('tfHpTxt'), tfDist=document.getElementById('tfDist');
+
+  // DPS refs
+  var dpsText=document.getElementById('dpsText');
+  var dpsEvents=[], dpsPeak=0;
+
   function panic(where, e){
     errBox.style.display='block';
     errBox.textContent='ERRORE '+where+': '+(e && (e.message||e));
@@ -189,12 +234,10 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
   try{
     // ===== Dati runtime =====
-    var lootBags=[];
-    var nextItemId=1;
+    var lootBags=[]; var nextItemId=1;
 
     // Inventario & equip
-    var inventory=[];
-    var equipped={weapon:null, armor:null};
+    var inventory=[]; var equipped={weapon:null, armor:null};
 
     // --- MAPPA
     var COLS=15, ROWS=9, TILE=64;
@@ -385,7 +428,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
           target = clickedEnemy; autoChase = false;
         }
         lastEnemyTapId = clickedEnemy.id; lastEnemyTapTs = now;
-        draw(); return;
+        updateTargetFrame(); draw(); return;
       }
 
       autoChase = false;
@@ -434,6 +477,18 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     function updateDmgTexts(){ var dt=120; for(var i=dmgTexts.length-1;i>=0;i--){ var d=dmgTexts[i]; d.ttl-=dt; d.y+=d.vy*dt; if(d.ttl<=0) dmgTexts.splice(i,1); } }
     function drawDmgTexts(){ for(var i=0;i<dmgTexts.length;i++){ var d=dmgTexts[i]; var a=Math.max(0,Math.min(1,d.ttl/700)); ctx.save(); ctx.globalAlpha=a; ctx.fillStyle=d.color; ctx.font='bold 16px system-ui'; ctx.textAlign='center'; ctx.fillText(d.txt,d.x,d.y); ctx.restore(); } }
 
+    function recordDPS(amount){
+      var now=performance.now();
+      dpsEvents.push({t:now, a:amount|0});
+      // purge >10s
+      var cutoff=now-10000;
+      while(dpsEvents.length && dpsEvents[0].t<cutoff) dpsEvents.shift();
+      var sum=0; for(var i=0;i<dpsEvents.length;i++) sum+=dpsEvents[i].a;
+      var dps = Math.round(sum/10);
+      if(dps>dpsPeak) dpsPeak=dps;
+      dpsText.textContent = dps + ' (picco ' + dpsPeak + ')';
+    }
+
     function attackEnemy(t){
       var now=performance.now(); player.lastAtk=now;
       var base=rndInt(player.atkMin,player.atkMax);
@@ -446,8 +501,11 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
       t.aggro=true; t.lastSeenTs=now;
 
+      recordDPS(dmg);
+      updateTargetFrame();
+
       if(t.hp===0){
-        if(target===t){ target=null; autoChase=false; }
+        if(target===t){ target=null; autoChase=false; hideTargetFrame(); }
         spawnLootBag(t.x,t.y, t.kind||t.type);
         gainXP(t.type==='ranged'?25:20);
         enemies.splice(enemies.indexOf(t),1);
@@ -465,7 +523,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       return false;
     }
 
-    // ===== LOOT con DROP TABLES =====
+    // ===== LOOT & ITEMS =====
     var BAG_TTL_MS = 90000, BAG_WARN_MS = 10000;
 
     function spawnLootBag(x,y,kind){
@@ -495,14 +553,12 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     function makeWeapon(name, icon, rarity, atkBonus){ return {id: nextItemId++, name, icon, rarity, type:'weapon', slot:'weapon', atkBonus: atkBonus||0}; }
     function makeArmor(name, icon, rarity, hpBonus){ return {id: nextItemId++, name, icon, rarity, type:'armor', slot:'armor', hpBonus: hpBonus||0}; }
 
-    // Loot smart: comuni auto-pick con toast; altrimenti finestra + FAB 👜
     function openLootIfAny(){
       var bag = getBagAt(player.x, player.y);
       if(!bag) { btnLoot.style.display='none'; return; }
 
-      btnLoot.style.display='block'; // mostra FAB quando sei sul sacco
+      btnLoot.style.display='block';
 
-      // Solo monete/pozioni?
       var commonOnly = true;
       for (var i = 0; i < bag.items.length; i++) {
         var t = bag.items[i].type;
@@ -518,19 +574,15 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
           lootBags.splice(lootBags.indexOf(bag),1);
           btnLoot.style.display='none';
         } else {
-          renderLoot(bag);
-          lootWin.classList.remove('hidden');
+          renderLoot(bag); lootWin.classList.remove('hidden');
         }
-        updateHotbarCounts();
-        draw(); drawMini();
+        updateHotbarCounts(); draw(); drawMini();
         if (coinsGained || potsGained) {
           toast('Raccolto: ' + (coinsGained?('🪙 x'+coinsGained+' '):'') + (potsGained?('🍵 x'+potsGained):''));
         }
         return;
       }
-
-      renderLoot(bag);
-      lootWin.classList.remove('hidden');
+      renderLoot(bag); lootWin.classList.remove('hidden');
     }
     function getBagAt(x,y){ for(var i=0;i<lootBags.length;i++){ if(lootBags[i].x===x && lootBags[i].y===y) return lootBags[i]; } return null; }
     function renderLoot(bag){
@@ -689,7 +741,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       equipped = d && d.equipped ? d.equipped : {weapon:null, armor:null};
       recomputeStats(false);
       var qd = localStorage.getItem(QUEST_KEY); if(qd){ var qj=JSON.parse(qd); if(qj){ currentQuest=qj.currentQuest||0; if(qj.quests&&qj.quests.length){ quests[0].progress=qj.quests[0].progress||0; quests[0].status=qj.quests[0].status||'active'; } } }
-      renderQuest(); updateHotbarCounts(); draw(); drawMini(); renderInventoryIfOpen();
+      renderQuest(); updateHotbarCounts(); draw(); drawMini(); renderInventoryIfOpen(); updateTargetFrame(); updateDpsPanel();
       toast('Caricato.');
     }catch(e){ panic('load',e); } }, false);
 
@@ -702,7 +754,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       try{
         if(autoChase && target){
           var stillThere=enemies.indexOf(target)!==-1;
-          if(!stillThere){ autoChase=false; target=null; }
+          if(!stillThere){ autoChase=false; target=null; hideTargetFrame(); }
           if(target && chebyshev(player,target)!==1 && pathQueue.length===0){
             var pAdj=bfsToAdjacencySmart(player.x,player.y,target.x,target.y,target.type);
             if(pAdj && pAdj.length) pathQueue=pAdj;
@@ -717,7 +769,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
           var blocked=false, i;
           if(!walkable(next.x,next.y)) blocked=true;
           for(i=0;i<enemies.length;i++){ if(enemies[i].x===next.x&&enemies[i].y===next.y){ blocked=true; break; } }
-        if(!blocked){ player.x=next.x; player.y=next.y; } else pathQueue=[];
+          if(!blocked){ player.x=next.x; player.y=next.y; } else pathQueue=[];
         }
 
         // Enemy AI (aggro/leash)
@@ -844,6 +896,8 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
         draw();
         drawAtkCooldown();
         if(!miniWrap.classList.contains('hidden')) drawMini();
+        updateTargetFrame();
+        updateDpsPanel();
       }catch(e){ panic('loop',e); }
     }
     function tryStepAlongPath(e){
@@ -856,7 +910,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     }
 
     setInterval(step,120);
-    draw(); drawAtkCooldown(); drawMini(); updateHotbarCounts();
+    draw(); drawAtkCooldown(); drawMini(); updateHotbarCounts(); updateTargetFrame(); updateDpsPanel();
 
     // DRAW
     function draw(){
@@ -968,6 +1022,28 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
     function updateHotbarCounts(){ potCntEl.textContent = String(player.pots||0); }
     function toast(msg){ statusEl.textContent='['+BUILD+'] '+msg; }
+
+    // ===== Target Frame & DPS UI =====
+    function capFirst(s){ return s ? s.charAt(0).toUpperCase()+s.slice(1) : ''; }
+    function updateTargetFrame(){
+      if(!target || enemies.indexOf(target)===-1){ hideTargetFrame(); return; }
+      tframe.style.display='block';
+      tfName.textContent = (target.kind ? capFirst(target.kind) : 'Nemico');
+      tfKind.textContent = (target.type==='ranged'?'Ranged':'Melee');
+      var dist = Math.max(Math.abs(player.x-target.x), Math.abs(player.y-target.y));
+      tfDist.textContent = dist+' tiles';
+      var ratio = Math.max(0, Math.min(1, target.hp/target.maxHp));
+      tfHpBar.style.width = (ratio*100)+'%';
+      tfHpBar.style.background = ratio<0.33 ? '#ef4444' : (ratio<0.66 ? '#f59e0b' : '#10b981');
+      tfHpTxt.textContent = 'HP '+target.hp+' / '+target.maxHp+' ('+Math.round(ratio*100)+'%)';
+    }
+    function hideTargetFrame(){ tframe.style.display='none'; }
+    function updateDpsPanel(){
+      var now=performance.now(), cutoff=now-10000, sum=0;
+      for(var i=0;i<dpsEvents.length;i++) if(dpsEvents[i].t>=cutoff) sum+=dpsEvents[i].a;
+      var dps=Math.round(sum/10); if(dps>dpsPeak) dpsPeak=dps;
+      dpsText.textContent = dps + ' (picco ' + dpsPeak + ')';
+    }
 
   }catch(e){ panic('boot', e); }
 })();
