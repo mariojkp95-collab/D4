@@ -675,25 +675,57 @@ function tileFree(x,y){
     function enemyRect(e){ var x=e.x*TILE+TILE/2-16, y=e.y*TILE+TILE/2-22; return {x:x,y:y,w:32,h:36}; }
     function inRect(px,py,r){ return px>=r.x&&px<=r.x+r.w&&py>=r.y&&py<=r.y+r.h; }
 
-    cv.addEventListener('click',function(ev){
-      if(isCasting) cancelCast('Mossa durante il cast');
-      var m = canvasToTile(ev), now=performance.now();
+    function onCanvasTap(ev){
+  try{
+    ev.preventDefault();
+    if(isCasting) cancelCast('Mossa durante il cast');
 
-      var i, clickedEnemy=null;
-      for(i=0;i<enemies.length;i++){ var ee=enemies[i]; if(inRect(m.sx,m.sy,enemyRect(ee))){ clickedEnemy=ee; break; } }
+    const m = canvasToTile(ev);
+    const now = performance.now();
 
-      if(clickedEnemy){
-        if(lastEnemyTapId===clickedEnemy.id && (now-lastEnemyTapTs)<=350){ target = clickedEnemy; autoChase = true; pathQueue = []; }
-        else { target = clickedEnemy; autoChase = false; }
-        lastEnemyTapId = clickedEnemy.id; lastEnemyTapTs = now;
-        updateTargetFrame(); draw(); return;
+    // DEBUG visivo: vedi se l’evento arriva e dove stai cliccando
+    statusEl.textContent = `[${BUILD}] tap su ${m.tx},${m.ty}`;
+
+    // Se clicchi su un nemico: target/auto-chase
+    let clickedEnemy=null;
+    for(let i=0;i<enemies.length;i++){
+      const ee=enemies[i];
+      if(inRect(m.sx,m.sy,enemyRect(ee))){ clickedEnemy=ee; break; }
+    }
+    if(clickedEnemy){
+      if(lastEnemyTapId===clickedEnemy.id && (now-lastEnemyTapTs)<=350){
+        target = clickedEnemy; autoChase = true; pathQueue = [];
+      } else {
+        target = clickedEnemy; autoChase = false;
       }
+      lastEnemyTapId = clickedEnemy.id; lastEnemyTapTs = now;
+      updateTargetFrame(); draw(); return;
+    }
 
-      autoChase = false;
-      var p=bfs(player.x,player.y,m.tx,m.ty); if(p && p.length) pathQueue=p;
+    // Altrimenti: pathfinding verso la casella
+    autoChase = false;
+    const p = bfs(player.x,player.y,m.tx,m.ty);
+    if(p && p.length){
+      pathQueue = p;
+    } else {
+      // altro DEBUG: spiega perché non parte
+      if(!walkable(m.tx,m.ty)){
+        statusEl.textContent = `[${BUILD}] casella non camminabile (blocco o portale)`;
+      } else {
+        statusEl.textContent = `[${BUILD}] nessun percorso trovato`;
+      }
+    }
 
-      if(target && chebyshev(player,target)===1 && (now-player.lastAtk)>=player.atkCd){ attackEnemy(target); return; }
-    }, false);
+    // attacco rapido se già adiacente e in cd ok
+    if(target && chebyshev(player,target)===1 && (now-player.lastAtk)>=player.atkCd){
+      attackEnemy(target); return;
+    }
+  }catch(e){ panic('input', e); }
+}
+
+// Ascolta sia pointerup che click (alcuni browser “perdono” click sul canvas)
+cv.addEventListener('pointerup', onCanvasTap, {passive:false});
+cv.addEventListener('click', onCanvasTap, false);
 
     cv.addEventListener('pointerdown',function(){
       var now=performance.now();
