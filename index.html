@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Drakoria — D3-AI1-AGGRO-FIX1</title>
+<title>Drakoria — INV-LOOT-FAB1</title>
 <style>
 :root{
   --bg:#0b1224; --panel:#0f172a; --stroke:#1f2a44; --text:#e5e7eb; --muted:#9ca3af;
@@ -25,6 +25,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 .fab{position:fixed;bottom:14px;width:56px;height:56px;border-radius:50%;border:1px solid #31406e;background:var(--accent);color:#fff;font-size:24px;line-height:56px;text-align:center;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:20}
 #btnUsePotion{ right:14px }
 #btnAttack{ right:82px }
+#btnLoot{ right:150px; display:none } /* nuovo: appare sopra un sacco */
 #atkCdCanvas{ position:fixed; right:82px; bottom:14px; width:56px; height:56px; z-index:21; pointer-events:none }
 .err{position:fixed;left:50%;top:70px;transform:translateX(-50%);background:#7f1d1d;color:#fff;border:1px solid #fecaca;border-radius:8px;padding:8px 12px;z-index:50;font-weight:600;max-width:90vw;white-space:pre-wrap}
 
@@ -43,7 +44,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 .q-claim{width:100%;margin-top:10px;padding:8px 10px;border:1px solid #31406e;background:#2563eb;color:#fff;border-radius:8px;cursor:pointer}
 .q-claim:disabled{background:#1f2a44;color:#9aa0ad;cursor:not-allowed}
 
-/* Mini-mappa */
+/* Mini mappa */
 #miniWrap{position:fixed; top:90px; right:16px; background:#0f172a; border:1px solid #1f2a44;border-radius:10px; padding:6px; z-index:25; box-shadow:0 10px 20px rgba(0,0,0,.35)}
 #mini{ display:block; width:160px; height:96px; image-rendering:pixelated }
 #btnMini{ margin-left:8px }
@@ -55,7 +56,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 .slot .lbl{ position:absolute; left:4px; top:2px; font:700 11px system-ui; color:#93c5fd }
 .slot .cnt{ position:absolute; right:4px; bottom:2px; font:700 12px system-ui; color:#e5e7eb; text-shadow:0 1px 2px #000 }
 
-/* Loot */
+/* Loot window */
 .loot{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);width:320px; max-width:92vw; background:#0f172a; border:1px solid #1f2a44; border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,.45); z-index:40;}
 .loot-h{display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid #1f2a44;font-weight:700}
 .loot-x{width:32px;height:26px;border-radius:6px;border:1px solid #31406e;background:#26325a;color:#fff;cursor:pointer}
@@ -107,7 +108,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   <canvas id="game" width="960" height="576" aria-label="Gioco"></canvas>
   <p class="help">
     Tap per muoverti • tap su un <b>nemico</b> per selezionarlo • <b>doppio tap</b> per <b>auto-inseguire</b> •
-    <b>🗡️</b> / SPAZIO attacca • Entra su un <b>sacco</b> per auto-raccogliere <span class="coin">monete</span>/<span class="potion">pozioni</span>.
+    <b>🗡️</b> / SPAZIO attacca • Entra su un <b>sacco</b> per raccogliere <span class="coin">monete</span>/<span class="potion">pozioni</span>.
   </p>
   <div id="status"></div>
 </main>
@@ -115,6 +116,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 <button id="btnAttack" class="fab" aria-label="Attacca">🗡️</button>
 <canvas id="atkCdCanvas" width="56" height="56" aria-hidden="true"></canvas>
 <button id="btnUsePotion" class="fab" aria-label="Usa pozione">🍵</button>
+<button id="btnLoot" class="fab" aria-label="Apri loot">👜</button> <!-- nuovo -->
 
 <div id="miniWrap" class="hidden"><canvas id="mini" width="80" height="48" aria-label="Mini mappa"></canvas></div>
 
@@ -157,9 +159,9 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 <div id="errBox" class="err" style="display:none"></div>
 
 <script>
-/* ===== Drakoria — BUILD D3-AI1-AGGRO-FIX1 ===== */
+/* ===== Drakoria — BUILD INV-LOOT-FAB1 ===== */
 (function(){
-  var BUILD='D3-AI1-AGGRO-FIX1';
+  var BUILD='INV-LOOT-FAB1';
   var SAVE_KEY='save_xrq1_inv';
   var QUEST_KEY='quests_xrq1_inv';
 
@@ -170,17 +172,14 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   var btnQuest=document.getElementById('btnQuest'), btnQuestClose=document.getElementById('btnQuestClose');
   var questPanel=document.getElementById('questPanel'), questBody=document.getElementById('questBody');
   var btnMini=document.getElementById('btnMini'), miniWrap=document.getElementById('miniWrap'), mini=document.getElementById('mini'), miniCtx=mini.getContext('2d');
+  var btnInventory=document.getElementById('btnInventory'), invWin=document.getElementById('invWin'), invClose=document.getElementById('invClose');
+  var invGrid=document.getElementById('invGrid'), eqWeaponName=document.getElementById('eqWeaponName'), eqArmorName=document.getElementById('eqArmorName');
+  var btnUnequipWeapon=document.getElementById('btnUnequipWeapon'), btnUnequipArmor=document.getElementById('btnUnequipArmor');
   var slot1=document.getElementById('slot1'), potCntEl=document.getElementById('cntPot');
   var errBox=document.getElementById('errBox');
   var atkCdCanvas=document.getElementById('atkCdCanvas'), atkCdCtx=atkCdCanvas.getContext('2d');
-
-  var lootWin=document.getElementById('lootWin'), lootBody=document.getElementById('lootBody');
-  var lootClose=document.getElementById('lootClose'), lootTakeAll=document.getElementById('lootTakeAll');
-
-  var invWin=document.getElementById('invWin'), invGrid=document.getElementById('invGrid'), invClose=document.getElementById('invClose');
-  var btnInventory=document.getElementById('btnInventory');
-  var eqWeaponName=document.getElementById('eqWeaponName'), eqArmorName=document.getElementById('eqArmorName');
-  var btnUnequipWeapon=document.getElementById('btnUnequipWeapon'), btnUnequipArmor=document.getElementById('btnUnequipArmor');
+  var lootWin=document.getElementById('lootWin'), lootBody=document.getElementById('lootBody'), lootClose=document.getElementById('lootClose'), lootTakeAll=document.getElementById('lootTakeAll');
+  var btnLoot=document.getElementById('btnLoot'); // nuovo FAB loot
 
   function panic(where, e){
     errBox.style.display='block';
@@ -204,32 +203,11 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
     // --- PLAYER / ENEMY
     var _eid=1; function giveId(e){ e.id=_eid++; return e; }
-    var player={
-      x:1,y:1,
-      baseMaxHp:100, baseAtkMin:6, baseAtkMax:12,
-      maxHp:100, hp:100, atkMin:6, atkMax:12,
-      coins:0,pots:1,lastAtk:0,atkCd:450,lvl:1,exp:0
-    };
+    var player={ x:1,y:1, baseMaxHp:100, baseAtkMin:6, baseAtkMax:12, maxHp:100, hp:100, atkMin:6, atkMax:12, coins:0,pots:1,lastAtk:0,atkCd:450,lvl:1,exp:0 };
     recomputeStats(true);
 
-    function makeSlime(x,y){
-      return giveId({
-        kind:'slime', type:'melee', x:x, y:y, spawnX:x, spawnY:y,
-        hp:60,maxHp:60, atkMin:5,atkMax:9,
-        hitCd:800,lastHit:0,
-        aggro:false, aggroRange:5, leashRange:15, loseAggroMs:6000, lastSeenTs:0,
-        moveTick:0, moveEvery:6, path:[], mode:'idle'
-      });
-    }
-    function makeArcher(x,y){
-      return giveId({
-        kind:'archer', type:'ranged', x:x, y:y, spawnX:x, spawnY:y,
-        hp:40,maxHp:40, atkCd:1200,lastShot:0, rangeMin:3, rangeMax:7,
-        pokeCd:700,lastPoke:0,
-        aggro:false, aggroRange:7, leashRange:15, loseAggroMs:6000, lastSeenTs:0,
-        moveTick:0, moveEvery:6, path:[], mode:'idle'
-      });
-    }
+    function makeSlime(x,y){ return giveId({ kind:'slime', type:'melee', x:x, y:y, spawnX:x, spawnY:y, hp:60,maxHp:60, atkMin:5,atkMax:9, hitCd:800,lastHit:0, aggro:false, aggroRange:5, leashRange:15, loseAggroMs:6000, lastSeenTs:0, moveTick:0, moveEvery:6, path:[], mode:'idle' }); }
+    function makeArcher(x,y){ return giveId({ kind:'archer', type:'ranged', x:x, y:y, spawnX:x, spawnY:y, hp:40,maxHp:40, atkCd:1200,lastShot:0, rangeMin:3, rangeMax:7, pokeCd:700,lastPoke:0, aggro:false, aggroRange:7, leashRange:15, loseAggroMs:6000, lastSeenTs:0, moveTick:0, moveEvery:6, path:[], mode:'idle' }); }
     var enemies=[ makeSlime(COLS-2,ROWS-2), makeArcher(COLS-4,2) ];
 
     // OGGETTI + PROIETTILI
@@ -292,15 +270,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       if(q.progress>=q.needed){ q.status='completed'; toast('Quest completata! Riscatta.'); }
       renderQuest();
     }
-    function claimQuest(){
-      var q=quests[currentQuest]; if(!q||q.status!=='completed') return;
-      var rw=q.reward||{};
-      if(rw.xp) gainXP(rw.xp);
-      if(rw.pots) player.pots += rw.pots;
-      q.status='claimed';
-      toast('Ricompensa ottenuta.');
-      renderQuest(); updateHotbarCounts();
-    }
+    function claimQuest(){ var q=quests[currentQuest]; if(!q||q.status!=='completed') return; var rw=q.reward||{}; if(rw.xp) gainXP(rw.xp); if(rw.pots) player.pots += rw.pots; q.status='claimed'; toast('Ricompensa ottenuta.'); renderQuest(); updateHotbarCounts(); }
     document.getElementById('btnQuest').addEventListener('click', function(){ questPanel.classList.toggle('hidden'); }, false);
     btnQuestClose.addEventListener('click', function(){ questPanel.classList.add('hidden'); }, false);
     renderQuest();
@@ -323,12 +293,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       if(Array.isArray(lootBags)){ for(i=0;i<lootBags.length;i++){ if(lootBags[i].x===x && lootBags[i].y===y) return false; } }
       return true;
     }
-    function randEmpty(){
-      for(var k=0;k<500;k++){
-        var x=(Math.random()*COLS|0), y=(Math.random()*ROWS|0);
-        if(inside(x,y) && tileFree(x,y)) return {x:x,y:y};
-      } return {x:2,y:2};
-    }
+    function randEmpty(){ for(var k=0;k<500;k++){ var x=(Math.random()*COLS|0), y=(Math.random()*ROWS|0); if(inside(x,y) && tileFree(x,y)) return {x:x,y:y}; } return {x:2,y:2}; }
 
     // PATHFIND
     function bfs(sx,sy,tx,ty){
@@ -385,7 +350,6 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     function inRect(px,py,r){ return px>=r.x&&px<=r.x+r.w&&py>=r.y&&py<=r.y+r.h; }
 
     cv.addEventListener('click',function(ev){
-      // ✅ FIX: chiamata corretta
       var m = canvasToTile(ev), now=performance.now(), cd=(now-player.lastAtk)>=player.atkCd;
 
       var i, clickedEnemy=null;
@@ -428,18 +392,19 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     slot1.addEventListener('click', function(){ usePotion(); }, false);
     slot1.addEventListener('touchend', function(e){ e.preventDefault(); usePotion(); }, false);
 
+    // === Inventario: binding robusti (click + touch)
+    btnInventory.onclick = function(){ invWin.classList.toggle('hidden'); renderInventory(); };
+    btnInventory.addEventListener('touchend', function(e){ e.preventDefault(); invWin.classList.toggle('hidden'); renderInventory(); }, false);
+    invClose.onclick = function(){ invWin.classList.add('hidden'); };
+    invClose.addEventListener('touchend', function(e){ e.preventDefault(); invWin.classList.add('hidden'); }, false);
+
+    btnUnequipWeapon.addEventListener('click', function(){ unequip('weapon'); }, false);
+    btnUnequipArmor .addEventListener('click', function(){ unequip('armor');  }, false);
+
     btnMini.addEventListener('click', function(){
       if(miniWrap.classList.contains('hidden')) miniWrap.classList.remove('hidden'); else miniWrap.classList.add('hidden');
       drawMini();
     }, false);
-
-    btnInventory.addEventListener('click', function(){
-      invWin.classList.toggle('hidden'); renderInventory();
-    }, false);
-    invClose.addEventListener('click', function(){ invWin.classList.add('hidden'); }, false);
-
-    btnUnequipWeapon.addEventListener('click', function(){ unequip('weapon'); }, false);
-    btnUnequipArmor.addEventListener('click', function(){ unequip('armor'); }, false);
 
     // COMBAT / INTERAZIONI
     function addDmgText(tx,ty,txt,color){ var px=tx*TILE+TILE/2, py=ty*TILE+TILE/2-28; dmgTexts.push({x:px,y:py,txt:txt,color:color,ttl:700,vy:-0.04}); }
@@ -472,8 +437,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     }
 
     // ===== LOOT con DROP TABLES =====
-    var BAG_TTL_MS = 90000;
-    var BAG_WARN_MS = 10000;
+    var BAG_TTL_MS = 90000, BAG_WARN_MS = 10000;
 
     function spawnLootBag(x,y,kind){
       var items=[];
@@ -502,27 +466,42 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     function makeWeapon(name, icon, rarity, atkBonus){ return {id: nextItemId++, name, icon, rarity, type:'weapon', slot:'weapon', atkBonus: atkBonus||0}; }
     function makeArmor(name, icon, rarity, hpBonus){ return {id: nextItemId++, name, icon, rarity, type:'armor', slot:'armor', hpBonus: hpBonus||0}; }
 
-    function autoPickupCommons(bag){
-      var keep=[], coinsGained=0, potsGained=0;
-      for(var i=0;i<bag.items.length;i++){
-        var it=bag.items[i];
-        if(it.type==='coin'){ coinsGained += it.qty; continue; }
-        if(it.type==='potion'){ potsGained += it.qty; continue; }
-        keep.push(it);
-      }
-      if(coinsGained>0){ player.coins += coinsGained; questAdd('coin', coinsGained); }
-      if(potsGained>0){ player.pots += potsGained; updateHotbarCounts(); }
-      bag.items = keep;
-      return bag.items.length===0;
-    }
-
+    // === PATCH: loot smart (comuni auto-pick con toast, altrimenti finestra)
     function openLootIfAny(){
       var bag = getBagAt(player.x, player.y);
-      if(!bag) return;
-      if(autoPickupCommons(bag)){
-        lootBags.splice(lootBags.indexOf(bag),1);
+      if(!bag) { btnLoot.style.display='none'; return; }
+
+      // mostra FAB 👜 quando stai su un sacco
+      btnLoot.style.display='block';
+
+      // Se comune-only → auto-pick con messaggio
+      var commonOnly = true;
+      for (var i = 0; i < bag.items.length; i++) {
+        var t = bag.items[i].type;
+        if (t !== 'coin' && t !== 'potion') { commonOnly = false; break; }
+      }
+
+      if (commonOnly) {
+        var beforeCoins = player.coins, beforePots = player.pots;
+        var emptied = autoPickupCommons(bag);
+        var coinsGained = player.coins - beforeCoins;
+        var potsGained  = player.pots  - beforePots;
+        if (emptied) {
+          lootBags.splice(lootBags.indexOf(bag),1);
+          btnLoot.style.display='none';
+        } else {
+          renderLoot(bag);
+          lootWin.classList.remove('hidden');
+        }
+        updateHotbarCounts();
+        draw(); drawMini();
+        if (coinsGained || potsGained) {
+          toast('Raccolto: ' + (coinsGained?('🪙 x'+coinsGained+' '):'') + (potsGained?('🍵 x'+potsGained):''));
+        }
         return;
       }
+
+      // Se ci sono item non-comuni, apri la finestra (oppure l’utente può premere 👜)
       renderLoot(bag);
       lootWin.classList.remove('hidden');
     }
@@ -546,9 +525,45 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       for(var i=0;i<bag.items.length;i++){
         if(bag.items[i].id===itemId){ var it=bag.items[i]; applyItem(it); bag.items.splice(i,1); break; }
       }
-      if(bag.items.length===0){ lootBags.splice(lootBags.indexOf(bag),1); lootWin.classList.add('hidden'); } else { renderLoot(bag); }
+      if(bag.items.length===0){
+        lootBags.splice(lootBags.indexOf(bag),1);
+        lootWin.classList.add('hidden');
+        btnLoot.style.display='none';
+      } else { renderLoot(bag); }
       draw(); drawMini(); updateHotbarCounts();
     }
+
+    // === FAB 👜 manuale: apre/gestisce loot se sei su un sacco
+    btnLoot.addEventListener('click', function(){
+      var bag = getBagAt(player.x, player.y);
+      if(!bag){ btnLoot.style.display='none'; return; }
+      renderLoot(bag);
+      lootWin.classList.remove('hidden');
+    }, false);
+
+    function autoPickupCommons(bag){
+      var keep=[], coinsGained=0, potsGained=0;
+      for(var i=0;i<bag.items.length;i++){
+        var it=bag.items[i];
+        if(it.type==='coin'){ coinsGained += it.qty; continue; }
+        if(it.type==='potion'){ potsGained += it.qty; continue; }
+        keep.push(it);
+      }
+      if(coinsGained>0){ player.coins += coinsGained; questAdd('coin', coinsGained); }
+      if(potsGained>0){ player.pots += potsGained; updateHotbarCounts(); }
+      bag.items = keep;
+      return bag.items.length===0;
+    }
+
+    lootClose.addEventListener('click', function(){ lootWin.classList.add('hidden'); }, false);
+    lootTakeAll.addEventListener('click', function(){
+      var bag=getBagAt(player.x,player.y); if(!bag) return;
+      while(bag.items.length){ applyItem(bag.items.shift()); }
+      lootBags.splice(lootBags.indexOf(bag),1);
+      lootWin.classList.add('hidden');
+      btnLoot.style.display='none';
+      draw(); drawMini(); updateHotbarCounts();
+    }, false);
 
     // INVENTARIO UI
     function applyItem(it){
@@ -563,19 +578,11 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       }
       inventory.push(it);
     }
-    lootClose.addEventListener('click', function(){ lootWin.classList.add('hidden'); }, false);
-    lootTakeAll.addEventListener('click', function(){
-      var bag=getBagAt(player.x,player.y); if(!bag) return;
-      while(bag.items.length){ applyItem(bag.items.shift()); }
-      lootBags.splice(lootBags.indexOf(bag),1);
-      lootWin.classList.add('hidden');
-      draw(); drawMini(); updateHotbarCounts();
-    }, false);
-
     function renderInventoryIfOpen(){ if(!invWin.classList.contains('hidden')) renderInventory(); }
     function renderInventory(){
       eqWeaponName.textContent = equipped.weapon ? (equipped.weapon.icon+' '+equipped.weapon.name+' (+'+ (equipped.weapon.atkBonus||0) +' ATK)') : '—';
       eqArmorName.textContent  = equipped.armor  ? (equipped.armor.icon +' '+equipped.armor.name +' (+'+ (equipped.armor.hpBonus||0) +' HP)') : '—';
+
       btnUnequipWeapon.disabled = !equipped.weapon;
       btnUnequipArmor.disabled  = !equipped.armor;
 
@@ -617,10 +624,6 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       if(!equipped[slot]) return;
       inventory.push(equipped[slot]); equipped[slot]=null; recomputeStats(false); renderInventory(); draw(); toast('Rimosso equip.');
     }
-    btnInventory.addEventListener('click', function(){ invWin.classList.toggle('hidden'); renderInventory(); }, false);
-    invClose.addEventListener('click', function(){ invWin.classList.add('hidden'); }, false);
-    btnUnequipWeapon.addEventListener('click', function(){ unequip('weapon'); }, false);
-    btnUnequipArmor.addEventListener('click', function(){ unequip('armor'); }, false);
 
     // SAVE/LOAD/RESET
     btnSave.addEventListener('click', function(){
@@ -689,7 +692,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
           if(!blocked){ player.x=next.x; player.y=next.y; } else pathQueue=[];
         }
 
-        // Enemy AI
+        // Enemy AI (aggro/leash)
         var now=performance.now();
         for(var j=0;j<enemies.length;j++){
           var e=enemies[j];
@@ -780,10 +783,10 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
         for(var c=coins.length-1;c>=0;c--) if(coins[c].x===player.x && coins[c].y===player.y){ coins.splice(c,1); player.coins++; questAdd('coin',1); gainXP(2); }
         for(var p=potions.length-1;p>=0;p--) if(potions[p].x===player.x && potions[p].y===player.y){ potions.splice(p,1); player.pots++; updateHotbarCounts(); }
 
-        // Loot
+        // Loot (smart + FAB)
+        var onBag = !!getBagAt(player.x, player.y);
+        if(!onBag) btnLoot.style.display='none';
         openLootIfAny();
-        var nowT=performance.now();
-        for(var lb=lootBags.length-1; lb>=0; lb--){ var b=lootBags[lb], remain=b.ttlMs - (nowT - b.createdAt); if(remain<=0){ lootBags.splice(lb,1); } }
 
         updateDmgTexts();
         draw();
