@@ -606,6 +606,18 @@ if (WORLD.current === 'main') {
 // UTILS
 function inside(x,y){ return x>=0&&y>=0&&x<COLS&&y<ROWS; }
 
+function manhattan(a,b){ return Math.abs(a.x - b.x) + Math.abs(a.y - b.y); }
+
+function randEmpty(){
+  // trova una casella libera/camminabile; fail-safe dopo N tentativi
+  for (var tries=0; tries<200; tries++){
+    var x = rndInt(0, COLS-1), y = rndInt(0, ROWS-1);
+    if (walkable(x,y) && tileFree(x,y)) return {x:x,y:y};
+  }
+  // fallback: vicino allo start
+  return {x:1, y:1};
+}
+
 function walkable(x,y){
   if (!inside(x,y)) return false;
   if (map[y][x]!==0) return false;
@@ -777,13 +789,13 @@ function tileFree(x,y){
     }
 
     function takePlayerDamage(amount, label){
-      player.hp=Math.max(0,player.hp-amount);
-      addDmgText(player.x,player.y,label+amount, '#ff6b6b');
-      flashCircle(player.x,player.y, '#ff0000', 0.25, 26);
-      logDmg('Subisci '+amount+' danni.');
-      if(isCasting) cancelCast('Interrotto dal danno');
-      if (player.hp===0) gameOver();
-      { alert('Sei stato sconfitto! Respawn al punto iniziale (niente perdita XP/livello).'); player.hp=player.maxHp; player.x=1; player.y=1; autoChase=false; }
+  player.hp = Math.max(0, player.hp - amount);
+  addDmgText(player.x, player.y, label + amount, '#ff6b6b');
+  flashCircle(player.x, player.y, '#ff0000', 0.25, 26);
+  logDmg('Subisci ' + amount + ' danni.');
+  if(isCasting) cancelCast('Interrotto dal danno');
+  if (player.hp === 0) gameOver();
+}
 
 
     function usePotion(){
@@ -814,16 +826,7 @@ function tileFree(x,y){
       for(var s=1;s<=5;s++){ var b=hotbar[s]; if(b && b.kind==='item' && b.itemId===itemId){ hotbar[s]=null; capEls[s].textContent='—'; } }
     }
 
-    function gameOver(){
-  toast('Sei stato sconfitto! Respawn tra un attimo…');
-  setTimeout(function(){
-    player.hp=player.maxHp;
-    player.x=1; player.y=1;
-    autoChase=false; pathQueue=[];
-    draw(); drawMini(); updateTargetFrame();
-  }, 600);
-}
-
+    
     function hasLoS(ax,ay,bx,by){
       if(ax===bx){ var step=(ay<by)?1:-1; for(var y=ay+step; y!==by; y+=step){ if(map[y][ax]===1) return false; } return true; }
       if(ay===by){ var st=(ax<bx)?1:-1; for(var x=ax+st; x!==bx; x+=st){ if(map[ay][x]===1) return false; } return true; }
@@ -861,16 +864,50 @@ function tileFree(x,y){
     function makeWeapon(name, icon, rarity, atkBonus){ return {id: nextItemId++, name, icon, rarity, type:'weapon', slot:'weapon', atkBonus: atkBonus||0}; }
     function makeArmor(name, icon, rarity, hpBonus){ return {id: nextItemId++, name, icon, rarity, type:'armor', slot:'armor', hpBonus: hpBonus||0}; }
 
-    function openLootIfAny(){
-      var bag = getBagAt(player.x, player.y);
-         var bag = getBagAt(player.x, player.y);
-   if(!bag) { btnLoot.style.display='none'; return; }
-+  var key = bagKey(bag);
-+  if (lootSuppress.id === key && performance.now() < lootSuppress.until) {
-+    btnLoot.style.display='block'; // mostra solo il pulsante, niente auto-popup
-+    return;
-+  }
-      if(!bag) { btnLoot.style.display='none'; return; }
+
+  // soppressione auto-popup (se l'utente ha appena chiuso il loot)
+  var key = bagKey(bag);
+  if (lootSuppress.id === key && performance.now() < lootSuppress.until) {
+    btnLoot.style.display='block'; // mostra solo il pulsante, niente finestra
+    return;
+  }
+
+  btnLoot.style.display='block';
+
+  // auto-raccolta solo monete/pozioni
+  var commonOnly = true;
+  for (var i = 0; i < bag.items.length; i++) {
+    var t = bag.items[i].type;
+    if (t !== 'coin' && t !== 'potion') { commonOnly = false; break; }
+  }
+
+  if (commonOnly) {
+    var beforeCoins = player.coins, beforePots = player.pots;
+    var emptied = autoPickupCommons(bag);
+    var coinsGained = player.coins - beforeCoins;
+    var potsGained  = player.pots  - beforePots;
+
+    if (emptied) {
+      lootBags.splice(lootBags.indexOf(bag),1);
+      btnLoot.style.display='none';
+    } else {
+      renderLoot(bag);
+      lootWin.classList.remove('hidden');
+    }
+    updateHotbarCounts(); draw(); drawMini();
+
+    if (coinsGained || potsGained) {
+      toast('Raccolto: ' + (coinsGained?('🪙 x'+coinsGained+' '):'') + (potsGained?('🍵 x'+potsGained):''));
+      if(coinsGained) logLoot('Monete +' + coinsGained);
+      if(potsGained)  logLoot('Pozioni +' + potsGained);
+    }
+    return;
+  }
+
+  // altrimenti apri la finestra
+  renderLoot(bag);
+  lootWin.classList.remove('hidden');
+}
       btnLoot.style.display='block';
 
       var commonOnly = true;
@@ -937,17 +974,27 @@ function tileFree(x,y){
       return bag.items.length===0;
     }
 
-    -    lootClose.addEventListener('click', function(){ lootWin.classList.add('hidden'); }, false);
-+    lootClose.addEventListener('click', function(){
-+      var bag = getBagAt(player.x, player.y);
-+      if (bag) { lootSuppress = { id:bagKey(bag), until: performance.now()+2000 }; }
-+      lootWin.classList.add('hidden');
-+    }, false);
-    lootTakeAll.addEventListener('click', 
-    function(){
-      function openLootIfAny(){
+    -    lootClose.addEventListener('click', function(){
   var bag = getBagAt(player.x, player.y);
-  if(!bag) { btnLoot.style.display='none'; return; }
+  if (bag) { lootSuppress = { id:bagKey(bag), until: performance.now()+2000 }; }
+  lootWin.classList.add('hidden');
+}, false);
+    lootTakeAll.addEventListener('click', function(){
+  var bag = getBagAt(player.x, player.y);
+  if(!bag) return;
+
+  // prendere tutto
+  while (bag.items.length) {
+    applyItem(bag.items.shift());
+  }
+  // rimuovi il sacco e chiudi
+  lootBags.splice(lootBags.indexOf(bag), 1);
+  lootWin.classList.add('hidden');
+  btnLoot.style.display='none';
+
+  updateHotbarCounts();
+  draw(); drawMini(); renderInventoryIfOpen();
+}, false);
 
   var key = bagKey(bag);
   if (lootSuppress.id === key && performance.now() < lootSuppress.until) {
