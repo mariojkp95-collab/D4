@@ -352,10 +352,92 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     var lastCast = {}; // id -> ts
     var isCasting=false, castStart=0, currentCasting=null;
 
-    // --- MAPPA
-    var COLS=15, ROWS=9, TILE=64;
-    var map=[]; for(var y0=0;y0<ROWS;y0++){ var row=[]; for(var x0=0;x0<COLS;x0++) row.push(0); map.push(row); }
-    for(var i0=0;i0<16;i0++){ var bx=(Math.random()*COLS|0), by=(Math.random()*ROWS|0); if((bx===1&&by===1)||(bx===COLS-2&&by===ROWS-2)){} else map[by][bx]=1; }
+ // === WORLD / MAP MANAGER ===
+const WORLD = {
+  current: 'main', // 'main' o 'spawn'
+  portals: {
+    main:  [ { x: 2,  y: 5,  to: 'spawn', tx: 22, ty: 5 } ],  // entra qui -> vai allo spawn
+    spawn: [ { x: 22, y: 5,  to: 'main',  tx: 3,  ty: 5 } ]   // esci dallo spawn -> torna in main
+  }
+};
+
+// se nel tuo codice “map” e “state.mobs/coins” esistono già, queste funzioni li riusano
+function buildMap(name){
+  WORLD.current = name;
+
+  // 1) ricostruisci la scacchiera (usa il tuo schema colori se diverso)
+  if (typeof map !== 'undefined') {
+    map.length = 0; // reset
+    const rows = (typeof state !== 'undefined' ? state.rows : Math.floor(game.rows||14));
+    const cols = (typeof state !== 'undefined' ? state.cols : Math.floor(game.cols||25));
+    for(let y=0;y<rows;y++){
+      const row=[];
+      for(let x=0;x<cols;x++){
+        // colori leggermente diversi per distinguere le mappe
+        if(name==='main'){
+          row.push( ((x+y)&1)?'#0e2a1e':'#123022' ); // verde scuro
+        }else{
+          row.push( ((x+y)&1)?'#1e1f3a':'#23264a' ); // blu violaceo per lo SPWN
+        }
+      }
+      map.push(row);
+    }
+  }
+
+  // 2) mob: nessun mob in spawn
+  if (typeof state !== 'undefined' && Array.isArray(state.mobs)) {
+    if(name==='spawn'){
+      state.mobs.length = 0; // svuota completamente
+    }else{
+      // lascia com'è (o, se vuoi, respawna se vuoto)
+      if(state.mobs.length===0 && typeof spawnMob==='function'){
+        for(let i=0;i<6;i++) spawnMob();
+      }
+    }
+  }
+
+  // 3) monete: opzionale → pulisci quando entri in spawn
+  if (typeof state !== 'undefined' && Array.isArray(state.coins)) {
+    if(name==='spawn') state.coins.length = 0;
+  }
+}
+
+// disegno portali (un tile “portale” per mappa)
+function drawPortals(ctx, tileSize){
+  const list = WORLD.portals[WORLD.current] || [];
+  ctx.save();
+  for(const p of list){
+    ctx.fillStyle = '#7c3aed'; // viola portale
+    ctx.globalAlpha = 0.9;
+    ctx.fillRect(p.x*tileSize+4, p.y*tileSize+4, tileSize-8, tileSize-8);
+    // alone
+    ctx.globalAlpha = 0.35;
+    ctx.fillRect(p.x*tileSize+2, p.y*tileSize+2, tileSize-4, tileSize-4);
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+
+// teletrasporto se il player è sopra un portale
+function checkPortalAndTeleport(){
+  if (typeof state === 'undefined') return;
+  const px = state.player.x, py = state.player.y;
+  const list = WORLD.portals[WORLD.current] || [];
+  const hit = list.find(p => p.x===px && p.y===py);
+  if(!hit) return;
+
+  // teleporto
+  buildMap(hit.to);
+  // posiziona il player nella casella di arrivo
+  state.player.x = hit.tx;
+  state.player.y = hit.ty;
+
+  // pulizia “sicura” dell’eventuale path in corso
+  if (state.clickPath && state.clickPath.length) state.clickPath.length = 0;
+
+  // feedback
+  if (typeof log === 'function') log(`Teletrasporto: ${WORLD.current.toUpperCase()}`);
+}
 
     // --- PLAYER / ENEMY
     var _eid=1; function giveId(e){ e.id=_eid++; return e; }
