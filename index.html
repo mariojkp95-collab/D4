@@ -865,11 +865,6 @@ function tileFree(x,y){
     }
     function makeWeapon(name, icon, rarity, atkBonus){ return {id: nextItemId++, name, icon, rarity, type:'weapon', slot:'weapon', atkBonus: atkBonus||0}; }
     function makeArmor(name, icon, rarity, hpBonus){ return {id: nextItemId++, name, icon, rarity, type:'armor', slot:'armor', hpBonus: hpBonus||0}; }
-
-
-  // soppressione auto-popup (se l'utente ha appena chiuso il loot)
-  var key = bagKey(bag);
-  if (lootSuppress.id === key && performance.now() < lootSuppress.until) {
     btnLoot.style.display='block'; // mostra solo il pulsante, niente finestra
     return;
   }
@@ -975,15 +970,24 @@ function tileFree(x,y){
       bag.items = keep;
       return bag.items.length===0;
     }
-
-    -    lootClose.addEventListener('click', function(){
+ lootClose.addEventListener('click', function(){
   var bag = getBagAt(player.x, player.y);
   if (bag) { lootSuppress = { id: bagKey(bag), until: performance.now() + 2000 }; }
   lootWin.classList.add('hidden');
 }, false);
-    lootTakeAll.addEventListener('click', function(){
+
+lootTakeAll.addEventListener('click', function(){
   var bag = getBagAt(player.x, player.y);
-  if(!bag) return;
+  if (!bag) return;
+
+  while (bag.items.length) applyItem(bag.items.shift());
+  lootBags.splice(lootBags.indexOf(bag), 1);
+
+  lootWin.classList.add('hidden');
+  btnLoot.style.display='none';
+  updateHotbarCounts();
+  draw(); drawMini();
+}, false);
 
   // prendi ogni item
   while (bag.items.length){
@@ -1416,20 +1420,21 @@ checkPortalAndTeleport();
         // Loot
         var onBag = !!getBagAt(player.x, player.y);
         if(!onBag) btnLoot.style.display='none';
-        function openLootIfAny(){
+        
+function openLootIfAny(){
   var bag = getBagAt(player.x, player.y);
   if(!bag){ btnLoot.style.display='none'; return; }
 
-  // anti-riapertura immediata dopo chiusura
+  // anti-riapertura immediata dopo chiusura manuale
   var key = bagKey(bag);
   if (lootSuppress.id === key && performance.now() < lootSuppress.until) {
-    btnLoot.style.display='block'; // mostra solo il pulsante, niente auto-popup
+    btnLoot.style.display='block';
     return;
   }
 
   btnLoot.style.display='block';
 
-  // auto-raccolta se il sacco contiene solo monete/pozioni
+  // auto-raccolta se contiene solo monete/pozioni
   var commonOnly = true;
   for (var i = 0; i < bag.items.length; i++){
     var t = bag.items[i].type;
@@ -1454,9 +1459,12 @@ checkPortalAndTeleport();
     return;
   }
 
-  // altrimenti apri la finestra loot
+  // altrimenti apri la finestra
   renderLoot(bag);
   lootWin.classList.remove('hidden');
+}
+
+lootWin.classList.remove('hidden');
 }
     function tryStepAlongPath(e){
       if(!e.path || !e.path.length) return;
