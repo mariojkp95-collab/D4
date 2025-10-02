@@ -683,10 +683,9 @@ function tileFree(x,y){
     const m = canvasToTile(ev);
     const now = performance.now();
 
-    // DEBUG visivo: vedi se l’evento arriva e dove stai cliccando
     statusEl.textContent = `[${BUILD}] tap su ${m.tx},${m.ty}`;
 
-    // Se clicchi su un nemico: target/auto-chase
+    // Clic su nemico = target / auto-chase
     let clickedEnemy=null;
     for(let i=0;i<enemies.length;i++){
       const ee=enemies[i];
@@ -702,35 +701,42 @@ function tileFree(x,y){
       updateTargetFrame(); draw(); return;
     }
 
-    // Altrimenti: pathfinding verso la casella
+    // Move verso la casella
     autoChase = false;
     const p = bfs(player.x,player.y,m.tx,m.ty);
+
     if(p && p.length){
       pathQueue = p;
     } else {
-      // altro DEBUG: spiega perché non parte
-      if(!walkable(m.tx,m.ty)){
-        statusEl.textContent = `[${BUILD}] casella non camminabile (blocco o portale)`;
-      } else {
-        statusEl.textContent = `[${BUILD}] nessun percorso trovato`;
+      // Fallback: prova almeno UN passo verso il target (4-direzioni)
+      const dx = Math.sign(m.tx - player.x);
+      const dy = Math.sign(m.ty - player.y);
+      // scegli l’asse “più distante” per primo
+      const tryFirst = (Math.abs(m.tx - player.x) >= Math.abs(m.ty - player.y))
+                       ? [{x:player.x+dx, y:player.y},{x:player.x, y:player.y+dy}]
+                       : [{x:player.x, y:player.y+dy},{x:player.x+dx, y:player.y}];
+      let stepped=false;
+      for(const nxt of tryFirst){
+        if(inside(nxt.x,nxt.y) && walkable(nxt.x,nxt.y)){
+          pathQueue = [nxt];
+          stepped=true;
+          break;
+        }
+      }
+      if(!stepped){
+        statusEl.textContent = `[${BUILD}] nessun percorso (blocco/portale davanti)`;
       }
     }
 
-    // attacco rapido se già adiacente e in cd ok
+    // Attacco rapido se già adiacente
     if(target && chebyshev(player,target)===1 && (now-player.lastAtk)>=player.atkCd){
       attackEnemy(target); return;
     }
   }catch(e){ panic('input', e); }
 }
 
-// Ascolta sia pointerup che click (alcuni browser “perdono” click sul canvas)
 cv.addEventListener('pointerup', onCanvasTap, {passive:false});
 cv.addEventListener('click', onCanvasTap, false);
-
-    cv.addEventListener('pointerdown',function(){
-      var now=performance.now();
-      if(now-lastTapTs<=300){ usePotion(); lastTapTs=0; } else lastTapTs=now;
-    }, false);
 
     function tryAttackAdjacent(){
       var now=performance.now(); if(now-player.lastAtk<player.atkCd || isCasting) return false;
