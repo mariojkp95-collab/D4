@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Drakoria — HUD-3</title>
+<title>Drakoria — HUD-4</title>
 <style>
 :root{
   --bg:#0b1224; --panel:#0f172a; --stroke:#1f2a44; --text:#e5e7eb; --muted:#9ca3af;
@@ -53,6 +53,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 .slot:active{ transform:scale(0.98) }
 .slot .lbl{ position:absolute; left:4px; top:2px; font:700 11px system-ui; color:#93c5fd }
 .slot .cnt{ position:absolute; right:4px; bottom:2px; font:700 12px system-ui; color:#e5e7eb; text-shadow:0 1px 2px #000 }
+.slot .cap{ font-size:20px }
 
 /* Loot window */
 .loot{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);width:320px; max-width:92vw; background:#0f172a; border:1px solid #1f2a44; border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,.45); z-index:40;}
@@ -72,18 +73,22 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 .btn:disabled{background:#1f2a44;color:#9aa0ad;cursor:not-allowed}
 
 /* Inventario */
-.inv{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); width:520px; max-width:95vw;
+.inv{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); width:560px; max-width:95vw;
      background:#0f172a; border:1px solid #1f2a44; border-radius:12px; box-shadow:0 18px 44px rgba(0,0,0,.45); z-index:42}
 .inv-h{display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid #1f2a44;font-weight:700}
 .inv-x{width:32px;height:26px;border-radius:6px;border:1px solid #31406e;background:#26325a;color:#fff;cursor:pointer}
+.inv-tabs{display:flex;gap:6px; padding:8px 10px; border-bottom:1px solid #1f2a44; flex-wrap:wrap}
+.tab{padding:6px 10px; border:1px solid #2a355c; background:#0b1224; color:#d2d7e3; border-radius:8px; cursor:pointer}
+.tab.active{ background:#1e293b; border-color:#3b4c78}
 .inv-body{padding:10px}
 .inv-eq{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:10px}
 .slotEq{border:1px dashed #2a355c;border-radius:10px;background:#0b1224;padding:8px;min-height:64px;display:flex;align-items:center;justify-content:space-between}
 .slotEq .info{display:flex;align-items:center;gap:8px}
 .slotEq .ico{font-size:22px}
 .inv-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-.invItem{border:1px solid #2a355c;border-radius:10px;background:#0b1224;padding:8px;min-height:82px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
-.invItem .cap{font-size:12px;text-align:center}
+.invItem{border:1px solid #2a355c;border-radius:10px;background:#0b1224;padding:8px;min-height:98px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center}
+.invItem .cap{font-size:12px}
+.invItem .row{display:flex; gap:6px; flex-wrap:wrap; justify-content:center}
 .invItem .act{font-size:12px;padding:6px 8px;border:1px solid #31406e;background:#1e40af;color:#fff;border-radius:8px;cursor:pointer}
 .badge{font:700 11px system-ui;color:#93c5fd}
 .eqName{color:#e5e7eb;font-weight:600}
@@ -110,7 +115,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 .thp>div{height:100%; width:0%; background:#ef4444}
 .thpTxt{font-size:12px; margin-top:4px; color:#e5e7eb}
 
-/* DPS panel (spostato in alto a destra) */
+/* DPS panel (alto a destra) */
 .dps{position:fixed; right:16px; top:16px; background:rgba(15,23,42,.9); border:1px solid #1f2a44; border-radius:10px; padding:8px 10px; z-index:26}
 .dps .h{font-weight:700; margin-bottom:4px}
 .dps .v{color:#e5e7eb}
@@ -133,6 +138,12 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 .log .heal{color:#86efac}
 .log .loot{color:#fde68a}
 .log .sys{color:#93c5fd}
+
+/* Picker slot */
+.picker{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:#0f172a; border:1px solid #1f2a44; border-radius:12px; z-index:45; box-shadow:0 16px 36px rgba(0,0,0,.45); padding:12px; width:320px; max-width:90vw}
+.picker h3{margin:0 0 8px 0}
+.picker .grid{display:grid; grid-template-columns:repeat(5,1fr); gap:8px}
+.pickBtn{padding:10px; background:#1e40af; border:1px solid #31406e; color:#fff; border-radius:10px; cursor:pointer}
 </style>
 </head>
 <body>
@@ -154,7 +165,8 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   <canvas id="game" width="960" height="576" aria-label="Gioco"></canvas>
   <p class="help">
     Tap per muoverti • tap su un <b>nemico</b> per selezionarlo (Target Frame) • <b>doppio tap</b> per auto-inseguire •
-    <b>🗡️</b> / SPAZIO attacca • Abilità da <b>Abilità</b> • Entra su un <b>sacco</b> per loot.
+    <b>🗡️</b> / SPAZIO attacca • Abilità da <b>Abilità</b> • Entra su un <b>sacco</b> per loot.  
+    Dall’<b>Inventario</b> → schede stile NosTale, e bottone <b>→ Barra</b> per assegnare ai numeri 1–5.
   </p>
   <div id="status"></div>
 </main>
@@ -176,11 +188,11 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
 <!-- Hotbar -->
 <div class="hotbar" id="hotbar">
-  <div class="slot" id="slot1"><span class="lbl">1</span>🍵<span class="cnt" id="cntPot">0</span></div>
-  <div class="slot"><span class="lbl">2</span>—</div>
-  <div class="slot"><span class="lbl">3</span>—</div>
-  <div class="slot"><span class="lbl">4</span>—</div>
-  <div class="slot"><span class="lbl">5</span>—</div>
+  <div class="slot" id="slot1"><span class="lbl">1</span><span class="cap" id="slotCap1">🍵</span><span class="cnt" id="cntPot">0</span></div>
+  <div class="slot" id="slot2"><span class="lbl">2</span><span class="cap" id="slotCap2">—</span></div>
+  <div class="slot" id="slot3"><span class="lbl">3</span><span class="cap" id="slotCap3">—</span></div>
+  <div class="slot" id="slot4"><span class="lbl">4</span><span class="cap" id="slotCap4">—</span></div>
+  <div class="slot" id="slot5"><span class="lbl">5</span><span class="cap" id="slotCap5">—</span></div>
 </div>
 
 <!-- Quest -->
@@ -205,6 +217,9 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 <!-- Inventory -->
 <section id="invWin" class="inv hidden" role="dialog" aria-modal="true" aria-label="Inventario">
   <div class="inv-h"><span>Inventario</span><button id="invClose" class="inv-x">×</button></div>
+
+  <div class="inv-tabs" id="invTabs"></div>
+
   <div class="inv-body">
     <div class="inv-eq">
       <div class="slotEq" id="eqWeapon">
@@ -217,6 +232,18 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       </div>
     </div>
     <div class="inv-grid" id="invGrid"></div>
+  </div>
+</section>
+
+<!-- Slot picker -->
+<section id="slotPicker" class="picker hidden" role="dialog" aria-modal="true">
+  <h3>Assegna a Barra Rapida</h3>
+  <div class="grid">
+    <button class="pickBtn" data-slot="1">1</button>
+    <button class="pickBtn" data-slot="2">2</button>
+    <button class="pickBtn" data-slot="3">3</button>
+    <button class="pickBtn" data-slot="4">4</button>
+    <button class="pickBtn" data-slot="5">5</button>
   </div>
 </section>
 
@@ -247,9 +274,9 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 <div id="errBox" class="err" style="display:none"></div>
 
 <script>
-/* ===== Drakoria — BUILD HUD-3 ===== */
+/* ===== Drakoria — BUILD HUD-4 ===== */
 (function(){
-  var BUILD='HUD-3';
+  var BUILD='HUD-4';
   var SAVE_KEY='save_xrq1_inv';
   var QUEST_KEY='quests_xrq1_inv';
 
@@ -261,9 +288,11 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   var questPanel=document.getElementById('questPanel'), questBody=document.getElementById('questBody');
   var btnMini=document.getElementById('btnMini'), miniWrap=document.getElementById('miniWrap'), mini=document.getElementById('mini'), miniCtx=mini.getContext('2d');
   var btnInventory=document.getElementById('btnInventory'), invWin=document.getElementById('invWin'), invClose=document.getElementById('invClose');
-  var invGrid=document.getElementById('invGrid'), eqWeaponName=document.getElementById('eqWeaponName'), eqArmorName=document.getElementById('eqArmorName');
+  var invTabs=document.getElementById('invTabs'), invGrid=document.getElementById('invGrid');
+  var eqWeaponName=document.getElementById('eqWeaponName'), eqArmorName=document.getElementById('eqArmorName');
   var btnUnequipWeapon=document.getElementById('btnUnequipWeapon'), btnUnequipArmor=document.getElementById('btnUnequipArmor');
   var slot1=document.getElementById('slot1'), potCntEl=document.getElementById('cntPot');
+  var slotPicker=document.getElementById('slotPicker');
   var errBox=document.getElementById('errBox');
   var atkCdCanvas=document.getElementById('atkCdCanvas'), atkCdCtx=atkCdCanvas.getContext('2d');
   var lootWin=document.getElementById('lootWin'), lootBody=document.getElementById('lootBody'), lootClose=document.getElementById('lootClose'), lootTakeAll=document.getElementById('lootTakeAll');
@@ -284,6 +313,15 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   // Cast UI
   var castWrap=document.getElementById('castWrap'), castName=document.getElementById('castName'), castTime=document.getElementById('castTime'), castBar=document.getElementById('castBar');
 
+  // Hotbar caps
+  var capEls=[null,
+    document.getElementById('slotCap1'),
+    document.getElementById('slotCap2'),
+    document.getElementById('slotCap3'),
+    document.getElementById('slotCap4'),
+    document.getElementById('slotCap5')
+  ];
+
   function panic(where, e){
     errBox.style.display='block';
     errBox.textContent='ERRORE '+where+': '+(e && (e.message||e));
@@ -295,7 +333,16 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     var lootBags=[]; var nextItemId=1;
 
     // Inventario & equip
-    var inventory=[]; var equipped={weapon:null, armor:null};
+    var inventory=[]; // {id,name,icon,rarity,type,qty?, slot?}
+    var equipped={weapon:null, armor:null};
+
+    // Categorie inventario (stile NosTale)
+    var INV_TABS=['Tutto','Armi','Armature','Consumabili','Materiali'];
+    var currentTab='Tutto';
+
+    // Hotbar binding (slot -> binding)
+    // binding: { kind:'potion'|'item', icon:'🍵', itemId?:number, type?:string }
+    var hotbar=[null, {kind:'potion', icon:'🍵'}, null, null, null, null];
 
     // Abilità (collezionabili)
     var abilities = [
@@ -429,73 +476,52 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     }
     function randEmpty(){ for(var k=0;k<500;k++){ var x=(Math.random()*COLS|0), y=(Math.random()*ROWS|0); if(inside(x,y) && tileFree(x,y)) return {x:x,y:y}; } return {x:2,y:2}; }
 
-    // PATHFIND
+    // PATHFIND + helpers (brevi)
     function bfs(sx,sy,tx,ty){
       if(!walkable(tx,ty)) return null;
-      var q=[{x:sx,y:sy}], head=0;
-      var prev={}, seen={}; seen[sx+','+sy]=1;
+      var q=[{x:sx,y:sy}], head=0, prev={}, seen={}; seen[sx+','+sy]=1;
       var dirs=[[1,0],[-1,0],[0,1],[0,-1]];
       while(head<q.length){
         var c=q[head++]; if(c.x===tx && c.y===ty){
-          var path=[], key=tx+','+ty;
-          while(prev[key]){
-            var s=key.split(','), px=parseInt(s[0],10), py=parseInt(s[1],10);
-            path.push({x:px,y:py}); key=prev[key].x+','+prev[key].y;
-          } path.reverse(); return path;
+          var path=[], key=tx+','+ty; while(prev[key]){ var s=key.split(','); path.push({x:+s[0],y:+s[1]}); key=prev[key].x+','+prev[key].y; } path.reverse(); return path;
         }
         for(var d=0; d<4; d++){
           var nx=c.x+dirs[d][0], ny=c.y+dirs[d][1], kk=nx+','+ny;
-          if(!walkable(nx,ny) || seen[kk]) continue;
-          seen[kk]=1; prev[kk]={x:c.x,y:c.y}; q.push({x:nx, y:ny});
+          if(!walkable(nx,ny) || seen[kk]) continue; seen[kk]=1; prev[kk]={x:c.x,y:c.y}; q.push({x:nx,y:ny});
         }
-      }
-      return null;
+      } return null;
     }
     function bfsToAdjacencySmart(sx,sy,tx,ty,enemyType){
-      var opts=[[tx+1,ty],[tx-1,ty],[tx,ty+1],[tx,ty-1]];
-      var bestPath=null, bestScore=1e9;
+      var opts=[[tx+1,ty],[tx-1,ty],[tx,ty+1],[tx,ty-1]], bestPath=null, bestScore=1e9;
       for(var i=0;i<opts.length;i++){
-        var ax=opts[i][0], ay=opts[i][1];
-        if(!walkable(ax,ay)) continue;
-        var occupied=false, j;
-        for(j=0;j<enemies.length;j++){ var e=enemies[j]; if(e.x===ax && e.y===ay){ occupied=true; break; } }
-        if(occupied) continue;
-        var p=bfs(sx,sy,ax,ay); if(!p) continue;
-        var score=p.length;
-        if(enemyType==='ranged'){ if(ax===tx || ay===ty) score += 2; }
+        var ax=opts[i][0], ay=opts[i][1]; if(!walkable(ax,ay)) continue;
+        var occupied=false, j; for(j=0;j<enemies.length;j++){ var e=enemies[j]; if(e.x===ax && e.y===ay){ occupied=true; break; } }
+        if(occupied) continue; var p=bfs(sx,sy,ax,ay); if(!p) continue; var score=p.length; if(enemyType==='ranged' && (ax===tx||ay===ty)) score+=2;
         if(score<bestScore){ bestScore=score; bestPath=p; }
-      }
-      return bestPath;
+      } return bestPath;
     }
 
     // INPUT
     var pathQueue=[], lastTapTs=0;
     function canvasToTile(ev){
-      var r=cv.getBoundingClientRect();
-      var hasTouch = ev && ev.touches && ev.touches[0];
-      var cx = hasTouch ? ev.touches[0].clientX : ev.clientX;
-      var cy = hasTouch ? ev.touches[0].clientY : ev.clientY;
+      var r=cv.getBoundingClientRect(), t=ev.touches&&ev.touches[0]; var cx=t?t.clientX:ev.clientX, cy=t?t.clientY:ev.clientY;
       var sx=(cx-r.left)*(cv.width/r.width), sy=(cy-r.top)*(cv.height/r.height);
-      var tx=Math.max(0,Math.min(COLS-1,(sx/TILE)|0));
-      var ty=Math.max(0,Math.min(ROWS-1,(sy/TILE)|0));
+      var tx=Math.max(0,Math.min(COLS-1,(sx/TILE)|0)), ty=Math.max(0,Math.min(ROWS-1,(sy/TILE)|0));
       return {sx:sx, sy:sy, tx:tx, ty:ty};
     }
     function enemyRect(e){ var x=e.x*TILE+TILE/2-16, y=e.y*TILE+TILE/2-22; return {x:x,y:y,w:32,h:36}; }
     function inRect(px,py,r){ return px>=r.x&&px<=r.x+r.w&&py>=r.y&&py<=r.y+r.h; }
 
     cv.addEventListener('click',function(ev){
-      if(isCasting) cancelCast('Mossa durante il cast'); // muoversi interrompe
+      if(isCasting) cancelCast('Mossa durante il cast');
       var m = canvasToTile(ev), now=performance.now();
 
       var i, clickedEnemy=null;
       for(i=0;i<enemies.length;i++){ var ee=enemies[i]; if(inRect(m.sx,m.sy,enemyRect(ee))){ clickedEnemy=ee; break; } }
 
       if(clickedEnemy){
-        if(lastEnemyTapId===clickedEnemy.id && (now-lastEnemyTapTs)<=350){
-          target = clickedEnemy; autoChase = true; pathQueue = [];
-        }else{
-          target = clickedEnemy; autoChase = false;
-        }
+        if(lastEnemyTapId===clickedEnemy.id && (now-lastEnemyTapTs)<=350){ target = clickedEnemy; autoChase = true; pathQueue = []; }
+        else { target = clickedEnemy; autoChase = false; }
         lastEnemyTapId = clickedEnemy.id; lastEnemyTapTs = now;
         updateTargetFrame(); draw(); return;
       }
@@ -503,7 +529,6 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       autoChase = false;
       var p=bfs(player.x,player.y,m.tx,m.ty); if(p && p.length) pathQueue=p;
 
-      // attacco opportunistico
       if(target && chebyshev(player,target)===1 && (now-player.lastAtk)>=player.atkCd){ attackEnemy(target); return; }
     }, false);
 
@@ -522,19 +547,29 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     btnAttack.addEventListener('touchend', function(e){ e.preventDefault(); tryAttackAdjacent(); }, false);
     window.addEventListener('keydown', function(e){ if(e.code==='Space'||e.key===' ') tryAttackAdjacent(); if(e.key==='e'||e.key==='E') usePotion(); }, false);
 
+    // Hotbar actions
+    function activateSlot(n){
+      var b=hotbar[n]; if(!b) return;
+      if(b.kind==='potion'){ usePotion(); return; }
+      if(b.kind==='item'){ useHotbarItem(b); return; }
+    }
+    document.getElementById('slot1').addEventListener('click', function(){ activateSlot(1); }, false);
+    document.getElementById('slot2').addEventListener('click', function(){ activateSlot(2); }, false);
+    document.getElementById('slot3').addEventListener('click', function(){ activateSlot(3); }, false);
+    document.getElementById('slot4').addEventListener('click', function(){ activateSlot(4); }, false);
+    document.getElementById('slot5').addEventListener('click', function(){ activateSlot(5); }, false);
+
     btnUsePotion.addEventListener('click', usePotion, false);
     btnUsePotion.addEventListener('touchend', function(e){ e.preventDefault(); usePotion(); }, false);
 
-    slot1.addEventListener('click', function(){ usePotion(); }, false);
-    slot1.addEventListener('touchend', function(e){ e.preventDefault(); usePotion(); }, false);
-
+    // Mini
     btnMini.addEventListener('click', function(){
       if(miniWrap.classList.contains('hidden')) miniWrap.classList.remove('hidden'); else miniWrap.classList.add('hidden');
       drawMini();
     }, false);
 
     // Inventario: binding
-    btnInventory.onclick = function(){ invWin.classList.toggle('hidden'); renderInventory(); };
+    btnInventory.onclick = function(){ invWin.classList.toggle('hidden'); renderTabs(); renderInventory(); };
     invClose.onclick = function(){ invWin.classList.add('hidden'); };
     btnUnequipWeapon.addEventListener('click', function(){ unequip('weapon'); }, false);
     btnUnequipArmor .addEventListener('click', function(){ unequip('armor');  }, false);
@@ -606,6 +641,28 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       flashScreen('#8b5cf6'); updateHotbarCounts(); draw();
       logHeal('Pozione: +' + heal + ' HP.');
     }
+    function useHotbarItem(binding){
+      // Cerco l'item in inventario
+      for(var i=0;i<inventory.length;i++){
+        var it=inventory[i];
+        if(it.id===binding.itemId){
+          if(it.type==='potion' || it.type==='consumable'){
+            // Usa e decrementa
+            var healed = 0;
+            if(it.heal){ var before=player.hp; player.hp=Math.min(player.maxHp, player.hp+it.heal); healed = player.hp-before; if(healed>0){ logHeal('Consumabile: +'+healed+' HP.'); flashScreen('#8b5cf6'); } }
+            if(typeof it.qty==='number'){ it.qty--; if(it.qty<=0){ inventory.splice(i,1); clearHotbarIfMissing(binding.itemId); } }
+            draw(); renderInventoryIfOpen(); return;
+          }
+          // altri tipi in futuro
+        }
+      }
+      // non trovato
+      toast('Oggetto non più in inventario'); clearHotbarIfMissing(binding.itemId);
+    }
+    function clearHotbarIfMissing(itemId){
+      for(var s=1;s<=5;s++){ var b=hotbar[s]; if(b && b.kind==='item' && b.itemId===itemId){ hotbar[s]=null; capEls[s].textContent='—'; } }
+    }
+
     function gameOver(){ alert('Sei stato sconfitto! Respawn al punto iniziale (niente perdita XP/livello).'); player.hp=player.maxHp; player.x=1; player.y=1; autoChase=false; }
 
     function hasLoS(ax,ay,bx,by){
@@ -619,12 +676,10 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
     function trySpawnLootBag(x,y,kind){
       var items=[];
-      // drop comuni
       if(Math.random()<0.85) items.push(makeItem('Monete', '🪙', 'common', 'coin', rndInt(1,3)));
-      if(Math.random()<0.35) items.push(makeItem('Pozione', '🍵', 'common', 'potion', 1));
-      // drop per tipo
+      if(Math.random()<0.35) items.push(makeItem('Pozione', '🍵', 'common', 'potion', 1, {heal:35}));
       if(kind==='slime' || kind==='melee'){
-        if(Math.random()<0.28) items.push(makeItem('Gelatina', '🟢', 'uncommon', 'slime_gel', 1));
+        if(Math.random()<0.28) items.push(makeItem('Gelatina', '🟢', 'uncommon', 'material', 1));
         if(Math.random()<0.18) items.push(makeWeapon('Pugnale Rozzo','🗡️','uncommon',2));
         if(Math.random()<0.10) items.push(makeArmor('Fascia di Stoffa','🛡️','uncommon',8));
         if(Math.random()<0.05) items.push(makeWeapon('Lama Viscosa','💚','rare',4));
@@ -636,42 +691,33 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       }
       if(Math.random()<0.01) items.push(makeWeapon('Lama Leggendaria','⚡','legend',9));
 
-      if(items.length===0) return; // <<< niente sprite se vuota
+      if(items.length===0) return;
       lootBags.push({x:x,y:y,items:items, createdAt:performance.now(), ttlMs:BAG_TTL_MS});
     }
-    function makeItem(name, icon, rarity, type, qty){ return {id: nextItemId++, name, icon, rarity, type, qty:qty||1}; }
+    function makeItem(name, icon, rarity, type, qty, extra){
+      var o={id: nextItemId++, name, icon, rarity, type, qty:qty||1};
+      if(extra && typeof extra==='object'){ for(var k in extra) o[k]=extra[k]; }
+      return o;
+    }
     function makeWeapon(name, icon, rarity, atkBonus){ return {id: nextItemId++, name, icon, rarity, type:'weapon', slot:'weapon', atkBonus: atkBonus||0}; }
     function makeArmor(name, icon, rarity, hpBonus){ return {id: nextItemId++, name, icon, rarity, type:'armor', slot:'armor', hpBonus: hpBonus||0}; }
 
     function openLootIfAny(){
       var bag = getBagAt(player.x, player.y);
       if(!bag) { btnLoot.style.display='none'; return; }
-
       btnLoot.style.display='block';
 
       var commonOnly = true;
-      for (var i = 0; i < bag.items.length; i++) {
-        var t = bag.items[i].type;
-        if (t !== 'coin' && t !== 'potion') { commonOnly = false; break; }
-      }
-
+      for (var i = 0; i < bag.items.length; i++) { var t = bag.items[i].type; if (t !== 'coin' && t !== 'potion') { commonOnly = false; break; } }
       if (commonOnly) {
         var beforeCoins = player.coins, beforePots = player.pots;
         var emptied = autoPickupCommons(bag);
         var coinsGained = player.coins - beforeCoins;
         var potsGained  = player.pots  - beforePots;
-        if (emptied) {
-          lootBags.splice(lootBags.indexOf(bag),1);
-          btnLoot.style.display='none';
-        } else {
-          renderLoot(bag); lootWin.classList.remove('hidden');
-        }
+        if (emptied) { lootBags.splice(lootBags.indexOf(bag),1); btnLoot.style.display='none'; }
+        else { renderLoot(bag); lootWin.classList.remove('hidden'); }
         updateHotbarCounts(); draw(); drawMini();
-        if (coinsGained || potsGained) {
-          toast('Raccolto: ' + (coinsGained?('🪙 x'+coinsGained+' '):'') + (potsGained?('🍵 x'+potsGained):''));
-          if(coinsGained) logLoot('Monete +' + coinsGained);
-          if(potsGained) logLoot('Pozioni +' + potsGained);
-        }
+        if (coinsGained || potsGained) { toast('Raccolto: ' + (coinsGained?('🪙 x'+coinsGained+' '):'') + (potsGained?('🍵 x'+potsGained):'')); if(coinsGained) logLoot('Monete +' + coinsGained); if(potsGained) logLoot('Pozioni +' + potsGained); }
         return;
       }
       renderLoot(bag); lootWin.classList.remove('hidden');
@@ -739,7 +785,6 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     function applyItem(it){
       if(it.type==='coin'){ player.coins += it.qty; questAdd('coin', it.qty); logLoot('Monete +' + it.qty); }
       else if(it.type==='potion'){ player.pots += it.qty; logLoot('Pozioni +' + it.qty); }
-      else if(it.type==='weapon' || it.type==='armor'){ inventory.push(it); renderInventoryIfOpen(); toast('Aggiunto in inventario: '+it.name); logLoot('Nuovo oggetto: '+it.name); }
       else { inventoryStackOrPush(it); renderInventoryIfOpen(); toast('Ottenuto: '+it.name+(it.qty?(' x'+it.qty):'')); logLoot('Ottenuto: '+it.name); }
     }
     function inventoryStackOrPush(it){
@@ -748,7 +793,22 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       }
       inventory.push(it);
     }
-    function renderInventoryIfOpen(){ if(!invWin.classList.contains('hidden')) renderInventory(); }
+    function renderInventoryIfOpen(){ if(!invWin.classList.contains('hidden')) { renderTabs(); renderInventory(); } }
+    function renderTabs(){
+      invTabs.innerHTML='';
+      INV_TABS.forEach(function(t){
+        var b=document.createElement('button'); b.className='tab'+(currentTab===t?' active':''); b.textContent=t;
+        b.onclick=function(){ currentTab=t; renderInventory(); };
+        invTabs.appendChild(b);
+      });
+    }
+    function typeToTab(t){
+      if(t==='weapon') return 'Armi';
+      if(t==='armor') return 'Armature';
+      if(t==='potion' || t==='consumable') return 'Consumabili';
+      if(t==='material') return 'Materiali';
+      return 'Tutto';
+    }
     function renderInventory(){
       eqWeaponName.textContent = equipped.weapon ? (equipped.weapon.icon+' '+equipped.weapon.name+' (+'+ (equipped.weapon.atkBonus||0) +' ATK)') : '—';
       eqArmorName.textContent  = equipped.armor  ? (equipped.armor.icon +' '+equipped.armor.name +' (+'+ (equipped.armor.hpBonus||0) +' HP)') : '—';
@@ -757,32 +817,53 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       btnUnequipArmor.disabled  = !equipped.armor;
 
       invGrid.innerHTML='';
-      for(var i=0;i<inventory.length;i++){
-        (function(it, idx){
-          var d=document.createElement('div'); d.className='invItem '+rarityClass(it.rarity);
-          var cap = (it.icon||'')+' '+it.name + (typeof it.qty==='number' ? (' ×'+it.qty) : '');
-          d.innerHTML = '<div class="cap">'+cap+'</div>';
-          var btn=document.createElement('button'); btn.className='act';
+      var items = inventory.filter(function(it){
+        if(currentTab==='Tutto') return true;
+        return typeToTab(it.type)===currentTab;
+      });
 
+      if(items.length===0){ invGrid.innerHTML='<div style="grid-column:1/-1;text-align:center;color:#9aa3b2">Nessun oggetto</div>'; return; }
+
+      for(var i=0;i<items.length;i++){
+        (function(it){
+          var d=document.createElement('div'); d.className='invItem '+rarityClass(it.rarity);
+          var qty = (typeof it.qty==='number' ? (' ×'+it.qty) : '');
+          d.innerHTML = '<div class="cap">'+(it.icon||'')+' '+it.name+qty+'</div>';
+
+          var row=document.createElement('div'); row.className='row';
+
+          // Equip/Usa
           if(it.type==='weapon'){
-            btn.textContent = 'Equippa 🗡️ (+'+(it.atkBonus||0)+' ATK)';
-            btn.onclick=function(){ equip(it,'weapon'); removeFromInventory(idx); renderInventory(); toast('Equipaggiata: '+it.name); logSys('Equip: '+it.name); };
+            var b1=document.createElement('button'); b1.className='act'; b1.textContent='Equippa 🗡️ (+'+(it.atkBonus||0)+' ATK)';
+            b1.onclick=function(){ equip(it,'weapon'); removeFromInventoryById(it.id); renderInventory(); toast('Equipaggiata: '+it.name); logSys('Equip: '+it.name); };
+            row.appendChild(b1);
           } else if(it.type==='armor'){
-            btn.textContent = 'Equippa 🛡️ (+'+(it.hpBonus||0)+' HP)';
-            btn.onclick=function(){ equip(it,'armor'); removeFromInventory(idx); renderInventory(); toast('Equipaggiata: '+it.name); logSys('Equip: '+it.name); };
-          } else if(it.type==='potion'){
-            btn.textContent='Usa 🍵';
-            btn.onclick=function(){
-              if(player.hp>=player.maxHp){ toast('HP già al massimo'); return; }
-              it.qty = (it.qty||1)-1; var heal=35; player.hp = Math.min(player.maxHp, player.hp+heal);
-              if(it.qty<=0) removeFromInventory(idx); renderInventory(); draw(); toast('Pozione usata'); logHeal('Pozione: +'+heal+' HP.');
+            var b2=document.createElement('button'); b2.className='act'; b2.textContent='Equippa 🛡️ (+'+(it.hpBonus||0)+' HP)';
+            b2.onclick=function(){ equip(it,'armor'); removeFromInventoryById(it.id); renderInventory(); toast('Equipaggiata: '+it.name); logSys('Equip: '+it.name); };
+            row.appendChild(b2);
+          } else if(it.type==='potion' || it.type==='consumable'){
+            var b3=document.createElement('button'); b3.className='act'; b3.textContent='Usa';
+            b3.onclick=function(){
+              if(it.heal){ var before=player.hp; player.hp=Math.min(player.maxHp, player.hp+it.heal); var healed=player.hp-before; if(healed>0){ logHeal('Consumabile: +'+healed+' HP.'); flashScreen('#8b5cf6'); draw(); } }
+              if(typeof it.qty==='number'){ it.qty--; if(it.qty<=0) removeFromInventoryById(it.id); renderInventory(); }
             };
-          } else {
-            btn.textContent='Tieni'; btn.disabled=true;
+            row.appendChild(b3);
           }
-          d.appendChild(btn); invGrid.appendChild(d);
-        })(inventory[i], i);
+
+          // Assegna a barra
+          if(it.type==='potion' || it.type==='consumable'){
+            var b4=document.createElement('button'); b4.className='act'; b4.textContent='→ Barra';
+            b4.onclick=function(){ openSlotPicker(function(slot){ assignToHotbar(slot, it); }); };
+            row.appendChild(b4);
+          }
+
+          d.appendChild(row);
+          invGrid.appendChild(d);
+        })(items[i]);
       }
+    }
+    function removeFromInventoryById(id){
+      for(var i=0;i<inventory.length;i++){ if(inventory[i].id===id){ inventory.splice(i,1); return; } }
     }
     function removeFromInventory(index){ if(index>=0 && index<inventory.length) inventory.splice(index,1); }
     function equip(item, slot){
@@ -793,6 +874,24 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     function unequip(slot){
       if(!equipped[slot]) return;
       inventory.push(equipped[slot]); equipped[slot]=null; recomputeStats(false); renderInventory(); draw(); toast('Rimosso equip.');
+    }
+
+    // Slot picker & hotbar assign
+    function openSlotPicker(cb){
+      slotPicker.classList.remove('hidden');
+      var btns=slotPicker.querySelectorAll('.pickBtn');
+      function onPick(ev){
+        var s=+ev.currentTarget.getAttribute('data-slot');
+        for(var i=0;i<btns.length;i++) btns[i].removeEventListener('click', onPick);
+        slotPicker.classList.add('hidden');
+        cb(s);
+      }
+      for(var i=0;i<btns.length;i++) btns[i].addEventListener('click', onPick, false);
+    }
+    function assignToHotbar(slot, it){
+      hotbar[slot]={kind:'item', icon:it.icon||'❖', itemId:it.id, type:it.type};
+      capEls[slot].textContent = it.icon||'❖';
+      toast(it.name+' assegnato allo slot '+slot);
     }
 
     // ===== ABILITÀ =====
@@ -840,7 +939,6 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       renderAbilities();
     }
     function aoeArcWave(){
-      // Effetto: AoE raggio 1
       var total=0, hits=0;
       for(var i=enemies.length-1;i>=0;i--){
         var e=enemies[i]; var dx=Math.abs(e.x-player.x), dy=Math.abs(e.y-player.y);
@@ -874,7 +972,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
         localStorage.setItem(SAVE_KEY, JSON.stringify({
           map:map, player:player, enemies:enemies, coins:coins, potions:potions, projectiles:projectiles,
           lootBags:bags, nextItemId:nextItemId, inventory:inventory, equipped:equipped,
-          lastCast:lastCast
+          lastCast:lastCast, hotbar:hotbar
         }));
         localStorage.setItem(QUEST_KEY, JSON.stringify({currentQuest:currentQuest,quests:quests}));
         toast('Salvato.');
@@ -901,6 +999,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       inventory = Array.isArray(d.inventory) ? d.inventory : [];
       equipped = d && d.equipped ? d.equipped : {weapon:null, armor:null};
       lastCast = d && d.lastCast ? d.lastCast : {};
+      if(d && d.hotbar){ hotbar=d.hotbar; for(var s=1;s<=5;s++){ capEls[s].textContent = hotbar[s] ? (hotbar[s].icon||'—') : '—'; } }
       recomputeStats(false);
       var qd = localStorage.getItem(QUEST_KEY); if(qd){ var qj=JSON.parse(qd); if(qj){ currentQuest=qj.currentQuest||0; if(qj.quests&&qj.quests.length){ quests[0].progress=qj.quests[0].progress||0; quests[0].status=qj.quests[0].status||'active'; } } }
       renderQuest(); updateHotbarCounts(); draw(); drawMini(); renderInventoryIfOpen(); updateTargetFrame(); updateDpsPanel(); renderAbilities();
@@ -914,7 +1013,6 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
     function step(){
       try{
-        // Casting progression
         if(isCasting && currentCasting){
           var now=performance.now();
           var elapsed=now-castStart, need=currentCasting.ab.castMs;
@@ -944,7 +1042,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
           if(!blocked){ player.x=next.x; player.y=next.y; } else pathQueue=[];
         }
 
-        // Enemy AI (aggro/leash)
+        // Enemy AI
         var now=performance.now();
         for(var j=0;j<enemies.length;j++){
           var e=enemies[j];
@@ -1038,7 +1136,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
           pr.x=nx; pr.y=ny;
         }
 
-        // --- PICKUP MAGNET ---
+        // PICKUP magnet
         for(var c=coins.length-1;c>=0;c--){
           if(isAdjacent(coins[c].x,coins[c].y,player.x,player.y)){
             coins.splice(c,1); player.coins++; questAdd('coin',1); gainXP(2); logLoot('Moneta +1');
@@ -1050,7 +1148,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
           }
         }
 
-        // Loot (smart + FAB)
+        // Loot
         var onBag = !!getBagAt(player.x, player.y);
         if(!onBag) btnLoot.style.display='none';
         openLootIfAny();
@@ -1226,10 +1324,8 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
   }catch(e){ panic('boot', e); }
 
-  // ===== loop =====
+  // loop tick
   setInterval(step,120);
-
-  // expose niente
 
 })();
 </script>
