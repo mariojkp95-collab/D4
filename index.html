@@ -2,17 +2,17 @@
 <html lang="it">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Drakoria — D3-COMPAT-LOOT1-FIX2</title>
+<title>Drakoria — D3-COMPAT-LOOT2</title>
 <style>
 :root{
   --bg:#0b1224; --panel:#0f172a; --stroke:#1f2a44; --text:#e5e7eb; --muted:#9ca3af;
   --tileA:#0e2a1e; --tileB:#123022; --block:#15223b;
-  --player:#3b82f6; --enemy:#ef4444; --coin:#facc15; --shadow:#0006; --hp:#10b981; --hpBack:#1f2937;
+  --player:#3b82f6; --enemy:#ef4444; --coin:#facc15; --shadow:#0006; --hpBack:#1f2937;
   --accent:#7c3aed; --rare:#60a5fa; --epic:#a78bfa; --legend:#f59e0b;
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto}
-header{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--panel);border-bottom:1px solid --stroke}
+header{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--panel);border-bottom:1px solid var(--stroke)}
 header .muted{color:var(--muted);margin-left:8px}
 header button{background:#26325a;color:#fff;border:1px solid #31406e;border-radius:8px;padding:6px 10px;cursor:pointer}
 header button:hover{filter:brightness(1.05)}
@@ -80,8 +80,8 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 <main>
   <canvas id="game" width="960" height="576" aria-label="Gioco"></canvas>
   <p class="help">
-    Clicca per muoverti • tap su un <b>nemico</b> per <b>selezionarlo</b> • <b>doppio tap</b> sullo stesso nemico per <b>auto-inseguire e attaccare</b> •
-    <b>🗡️</b> o <b>SPAZIO</b> attacca se adiacente • Raccogli <span class="coin">●</span> e <span class="potion">🍵</span> • Entra su un <b>sacco</b> per aprire il <b>loot</b>
+    Clicca per muoverti • tap su un <b>nemico</b> per <b>selezionarlo</b> • <b>doppio tap</b> per <b>auto-inseguire</b> •
+    <b>🗡️</b> / SPAZIO attacca • Entra su un <b>sacco</b> per auto-raccogliere <span class="coin">monete</span>/<span class="potion">pozioni</span>.
   </p>
   <div id="status"></div>
 </main>
@@ -114,13 +114,12 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 <div id="errBox" class="err" style="display:none"></div>
 
 <script>
-/* ===== Drakoria — BUILD D3-COMPAT-LOOT1-FIX2 ===== */
+/* ===== Drakoria — BUILD D3-COMPAT-LOOT2 ===== */
 (function(){
-  var BUILD='D3-COMPAT-LOOT1-FIX2';
+  var BUILD='D3-COMPAT-LOOT2';
   var SAVE_KEY='save_xrq1_compat';
   var QUEST_KEY='quests_xrq1_compat';
 
-  // Canvas & HUD
   var cv=document.getElementById('game'); var ctx=cv.getContext('2d');
   var statusEl=document.getElementById('status');
   var btnAttack=document.getElementById('btnAttack'), btnUsePotion=document.getElementById('btnUsePotion');
@@ -132,7 +131,6 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   var errBox=document.getElementById('errBox');
   var atkCdCanvas=document.getElementById('atkCdCanvas'), atkCdCtx=atkCdCanvas.getContext('2d');
 
-  // Loot UI
   var lootWin=document.getElementById('lootWin'), lootBody=document.getElementById('lootBody');
   var lootClose=document.getElementById('lootClose'), lootTakeAll=document.getElementById('lootTakeAll');
 
@@ -143,8 +141,8 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   }
 
   try{
-    // === DICHIARAZIONI CHE DEVONO ESISTERE PRIMA DI randEmpty()/tileFree ===
-    var lootBags=[];        // sacchi a terra (PRIMA di randEmpty/tileFree)
+    // ===== PRIMA di randEmpty/tileFree =====
+    var lootBags=[];        // {x,y,items:[...], createdAt, ttlMs}
     var nextItemId=1;
 
     // --- MAPPA
@@ -160,7 +158,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       giveId({type:'ranged',x:COLS-4,y:2,hp:40,maxHp:40,atkCd:1200,lastShot:0,rangeMin:3,rangeMax:7,kiteEvery:2,moveTick:0,patrolEvery:10,pokeCd:700,lastPoke:0})
     ];
 
-    // --- OGGETTI LEGACY + PROIETTILI (usano randEmpty → safe, lootBags già esiste)
+    // --- OGGETTI LEGACY + PROIETTILI
     var coins=[], potions=[], projectiles=[];
     for(var i1=0;i1<4;i1++) coins.push(randEmpty());
     for(var i2=0;i2<1;i2++) potions.push(randEmpty());
@@ -206,9 +204,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     }
     function questAdd(kind,amt){
       var q=quests[currentQuest]; if(!q||q.status!=='active') return;
-      if(q.type==='collect' && kind==='coin'){
-        q.progress = Math.min(q.needed, q.progress + (amt||1));
-      }
+      if(q.type==='collect' && kind==='coin'){ q.progress = Math.min(q.needed, q.progress + (amt||1)); }
       if(q.progress>=q.needed){ q.status='completed'; toast('Quest completata! Riscatta.'); }
       renderQuest();
     }
@@ -240,10 +236,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       for(i=0;i<enemies.length;i++){ if(enemies[i].x===x && enemies[i].y===y) return false; }
       for(i=0;i<coins.length;i++){ if(coins[i].x===x && coins[i].y===y) return false; }
       for(i=0;i<potions.length;i++){ if(potions[i].x===x && potions[i].y===y) return false; }
-      // Guardia extra: se per qualunque motivo lootBags non è un array, salta il controllo
-      if(Array.isArray(lootBags)){
-        for(i=0;i<lootBags.length;i++){ if(lootBags[i].x===x && lootBags[i].y===y) return false; }
-      }
+      if(Array.isArray(lootBags)){ for(i=0;i<lootBags.length;i++){ if(lootBags[i].x===x && lootBags[i].y===y) return false; } }
       return true;
     }
     function randEmpty(){
@@ -346,7 +339,6 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
     btnUsePotion.addEventListener('click', usePotion, false);
     btnUsePotion.addEventListener('touchend', function(e){ e.preventDefault(); usePotion(); }, false);
-
     slot1.addEventListener('click', function(){ usePotion(); }, false);
     slot1.addEventListener('touchend', function(e){ e.preventDefault(); usePotion(); }, false);
 
@@ -366,7 +358,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       t.hp=Math.max(0,t.hp-dmg); addDmgText(t.x,t.y,'-'+dmg,'#ffd166'); flashCircle(t.x,t.y,'#ff0000',0.25,26);
       if(t.hp===0){
         if(target===t){ target=null; autoChase=false; }
-        spawnLootBag(t.x,t.y, t.type);
+        spawnLootBag(t.x,t.y);
         gainXP(t.type==='ranged'?25:20);
         enemies.splice(enemies.indexOf(t),1);
         var s=randEmpty(); var nu = (t.type==='ranged') ? giveId(spawnRangedAt(s.x,s.y)) : giveId(spawnMeleeAt(s.x,s.y));
@@ -381,14 +373,16 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     function usePotion(){ if(player.pots<=0||player.hp>=player.maxHp) return; player.pots--; player.hp=Math.min(player.maxHp,player.hp+35); flashScreen('#8b5cf6'); updateHotbarCounts(); draw(); }
     function gameOver(){ alert('Sei stato sconfitto! Respawn al punto iniziale (niente perdita XP/livello).'); player.hp=player.maxHp; player.x=1; player.y=1; autoChase=false; }
 
-    // --- LOS per ranged
     function hasLoS(ax,ay,bx,by){
       if(ax===bx){ var step=(ay<by)?1:-1; for(var y=ay+step; y!==by; y+=step){ if(map[y][ax]===1) return false; } return true; }
       if(ay===by){ var st=(ax<bx)?1:-1; for(var x=ax+st; x!==bx; x+=st){ if(map[ay][x]===1) return false; } return true; }
       return false;
     }
 
-    // --- LOOT SYSTEM
+    // ===== LOOT SYSTEM =====
+    var BAG_TTL_MS = 90000;      // 90s
+    var BAG_WARN_MS = 10000;     // ultimi 10s lampeggia
+
     function spawnLootBag(x,y){
       var items=[];
       items.push(makeItem('Monete', '🪙', 'common', 'coin', rndInt(1,3)));
@@ -396,14 +390,38 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       if(Math.random()<0.20) items.push(makeItem('Frammento', '🧩', 'uncommon', 'shard', 1));
       if(Math.random()<0.08)  items.push(makeItem('Gemma', '🔷', 'rare', 'gem', 1));
       if(Math.random()<0.02)  items.push(makeItem('Idolo', '🏺', 'legend', 'idol', 1));
-      lootBags.push({x:x,y:y,items:items});
+      lootBags.push({x:x,y:y,items:items, createdAt:performance.now(), ttlMs:BAG_TTL_MS});
     }
     function makeItem(name, icon, rarity, type, qty){
       return {id: nextItemId++, name:name, icon:icon, rarity:rarity, type:type, qty:qty||1};
     }
+
+    function autoPickupCommons(bag){
+      // raccoglie monete/pozioni, ritorna true se il sacco è vuoto
+      var keep=[];
+      var coinsGained=0, potsGained=0;
+      for(var i=0;i<bag.items.length;i++){
+        var it=bag.items[i];
+        if(it.type==='coin'){ coinsGained += it.qty; continue; }
+        if(it.type==='potion'){ potsGained += it.qty; continue; }
+        keep.push(it);
+      }
+      if(coinsGained>0){ player.coins += coinsGained; questAdd('coin', coinsGained); }
+      if(potsGained>0){ player.pots += potsGained; updateHotbarCounts(); }
+      bag.items = keep;
+      return bag.items.length===0;
+    }
+
     function openLootIfAny(){
       var bag = getBagAt(player.x, player.y);
       if(!bag) return;
+      // 1) auto-pickup comuni
+      if(autoPickupCommons(bag)){
+        // sacco vuoto: rimuovi
+        lootBags.splice(lootBags.indexOf(bag),1);
+        return;
+      }
+      // 2) resta roba non comune → apri finestra
       renderLoot(bag);
       lootWin.classList.remove('hidden');
     }
@@ -468,9 +486,14 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     // --- SAVE/LOAD/RESET
     btnSave.addEventListener('click', function(){
       try{
+        var now=performance.now();
+        var bags=lootBags.map(function(b){
+          var remain=Math.max(0, b.ttlMs - (now - b.createdAt));
+          return {x:b.x,y:b.y,items:b.items, ttlRemain:remain};
+        });
         localStorage.setItem(SAVE_KEY, JSON.stringify({
           map:map, player:player, enemies:enemies, coins:coins, potions:potions, projectiles:projectiles,
-          lootBags:lootBags, nextItemId:nextItemId
+          lootBags:bags, nextItemId:nextItemId
         }));
         localStorage.setItem(QUEST_KEY, JSON.stringify({currentQuest:currentQuest,quests:quests}));
         toast('Salvato.');
@@ -486,7 +509,16 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       coins.length=0; if(d && d.coins){ for(i=0;i<d.coins.length;i++) coins.push(d.coins[i]); }
       potions.length=0; if(d && d.potions){ for(i=0;i<d.potions.length;i++) potions.push(d.potions[i]); }
       projectiles.length=0; if(d && d.projectiles){ for(i=0;i<d.projectiles.length;i++) projectiles.push(d.projectiles[i]); }
-      lootBags = Array.isArray(d.lootBags) ? d.lootBags.slice() : [];
+      lootBags.length=0;
+      if(d && Array.isArray(d.lootBags)){
+        for(i=0;i<d.lootBags.length;i++){
+          var src=d.lootBags[i];
+          lootBags.push({
+            x:src.x, y:src.y, items:src.items||[],
+            createdAt:performance.now(), ttlMs:Math.max(0, src.ttlRemain||0)
+          });
+        }
+      }
       if(d && d.nextItemId) nextItemId=d.nextItemId|0;
       var qd = localStorage.getItem(QUEST_KEY); if(qd){ var qj=JSON.parse(qd); if(qj){ currentQuest=qj.currentQuest||0; if(qj.quests&&qj.quests.length){ quests[0].progress=qj.quests[0].progress||0; quests[0].status=qj.quests[0].status||'active'; } } }
       renderQuest(); updateHotbarCounts(); draw(); drawMini();
@@ -498,6 +530,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     // --- LOOP
     function step(){
       try{
+        // Auto-chase
         if(autoChase && target){
           var stillThere=false; for(var te=0; te<enemies.length; te++){ if(enemies[te]===target){ stillThere=true; break; } }
           if(!stillThere){ autoChase=false; target=null; }
@@ -510,6 +543,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
           }
         }
 
+        // Move player along path
         if(pathQueue.length){
           var next=pathQueue.shift();
           var blocked=false, i;
@@ -518,6 +552,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
           if(!blocked){ player.x=next.x; player.y=next.y; } else pathQueue=[];
         }
 
+        // Enemy AI
         for(var j=0;j<enemies.length;j++){
           var e=enemies[j];
           if(e.type==='melee'){
@@ -573,6 +608,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
           }
         }
 
+        // Proiettili
         for(var pi=projectiles.length-1; pi>=0; pi--){
           var pr=projectiles[pi];
           pr.spdTick=(pr.spdTick+1)%2; if(pr.spdTick!==0) continue;
@@ -589,8 +625,15 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
         for(var c=coins.length-1;c>=0;c--) if(coins[c].x===player.x && coins[c].y===player.y){ coins.splice(c,1); player.coins++; questAdd('coin',1); gainXP(2); }
         for(var p=potions.length-1;p>=0;p--) if(potions[p].x===player.x && potions[p].y===player.y){ potions.splice(p,1); player.pots++; updateHotbarCounts(); }
 
-        // Apri loot se stai sopra un sacco
+        // Interazione sacchi (auto-pickup + apri se restano rari)
         openLootIfAny();
+
+        // Timer despawn sacchi
+        var nowT=performance.now();
+        for(var lb=lootBags.length-1; lb>=0; lb--){
+          var b=lootBags[lb], remain=b.ttlMs - (nowT - b.createdAt);
+          if(remain<=0){ lootBags.splice(lb,1); }
+        }
 
         updateDmgTexts();
         draw();
@@ -619,9 +662,16 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
         ctx.fillStyle='#0006'; ctx.beginPath(); ctx.ellipse(px+TILE/2,py+TILE-12,12,4,0,0,Math.PI*2); ctx.fill();
       }
       // loot bags
-      if(!Array.isArray(lootBags)) lootBags=[]; // guardia extra
+      var now=performance.now();
       for(var lb=0; lb<lootBags.length; lb++){
         var b=lootBags[lb], bx=b.x*TILE, by=b.y*TILE;
+        var remain=b.ttlMs-(now-b.createdAt);
+        var warn=remain<=BAG_WARN_MS;
+        ctx.save();
+        if(warn){
+          var pulse = (Math.sin(now/120)+1)/2; // 0..1
+          ctx.globalAlpha = 0.55 + 0.4*pulse;
+        }
         ctx.fillStyle=getVar('--shadow'); ctx.beginPath(); ctx.ellipse(bx+TILE/2,by+TILE-10,16,6,0,0,Math.PI*2); ctx.fill();
         ctx.fillStyle='#b45309'; ctx.beginPath(); ctx.moveTo(bx+TILE/2-12,by+TILE/2+6);
         ctx.lineTo(bx+TILE/2+12,by+TILE/2+6); ctx.lineTo(bx+TILE/2+8,by+TILE/2-8);
@@ -629,6 +679,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
         ctx.fillStyle='#78350f'; ctx.fillRect(bx+TILE/2-8,by+TILE/2-8,16,3);
         ctx.fillStyle='#facc15'; ctx.font='bold 14px system-ui'; ctx.textAlign='center';
         ctx.fillText('🪙', bx+TILE/2, by+TILE/2-12);
+        ctx.restore();
       }
 
       // enemies
@@ -646,7 +697,6 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
       drawDmgTexts();
       drawXpBar();
-
       statusEl.textContent = 'build: '+BUILD+' | LV '+player.lvl+' | HP '+player.hp+'/'+player.maxHp+' | coins '+player.coins+' | pots '+player.pots+(target?' | target lock ON'+(autoChase?' (auto)':''):'');
       ctx.fillStyle='#ffffffcc'; ctx.font='bold 14px system-ui'; ctx.fillText('BUILD '+BUILD, 8, 24);
     }
@@ -667,6 +717,10 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       ctx.strokeRect(px,py,w,h);
       ctx.lineWidth=1;
     }
+    function drawTargetRing(tx,ty){
+      var x=tx*TILE+TILE/2, y=ty*TILE+TILE/2;
+      ctx.save(); ctx.strokeStyle='#ef4444'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(x,y,28,0,Math.PI*2); ctx.stroke(); ctx.restore();
+    }
     function drawXpBar(){
       var pad=6, h=10, x=pad, y=pad, w=cv.width-pad*2, need=(player.lvl<MAX_LVL?xpNeeded(player.lvl):1), ratio=(player.lvl<MAX_LVL?Math.max(0,Math.min(1,player.exp/need)):1);
       ctx.fillStyle='rgba(11,18,36,.66)'; ctx.fillRect(x,y,w,h);
@@ -674,10 +728,6 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       ctx.strokeStyle='#1f2a44'; ctx.strokeRect(x,y,w,h);
       ctx.fillStyle='#e5e7eb'; ctx.font='12px system-ui'; ctx.textAlign='left'; ctx.textBaseline='top';
       ctx.fillText('LV '+player.lvl+(player.lvl<MAX_LVL?(' — '+Math.floor(ratio*100)+'%'):' — MAX'), x, y+h+2);
-    }
-    function drawTargetRing(tx,ty){
-      var x=tx*TILE+TILE/2, y=ty*TILE+TILE/2;
-      ctx.save(); ctx.strokeStyle='#ef4444'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(x,y,28,0,Math.PI*2); ctx.stroke(); ctx.restore();
     }
     function flashScreen(color){ ctx.save(); ctx.globalAlpha=.20; ctx.fillStyle=color; ctx.fillRect(0,0,cv.width,cv.height); ctx.restore(); }
     function flashCircle(tx,ty,color,alpha,r){ var x=tx*TILE+TILE/2,y=ty*TILE+TILE/2; ctx.save(); ctx.globalAlpha=alpha; ctx.fillStyle=color; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); ctx.restore(); }
@@ -693,25 +743,30 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
     function drawMini(){
       if(miniWrap.classList.contains('hidden')) return;
-      if(!Array.isArray(lootBags)) lootBags=[]; // guardia extra
       miniCtx.clearRect(0,0,mini.width,mini.height);
       var x,y;
       for(y=0;y<ROWS;y++) for(x=0;x<COLS;x++){
         miniCtx.fillStyle = (map[y][x]===1)?'#2b3b66':'#164e24';
         miniCtx.fillRect(x*(mini.width/COLS), y*(mini.height/ROWS), (mini.width/COLS), (mini.height/ROWS));
       }
+      // sacchi (gialli)
+      miniCtx.fillStyle='#f59e0b';
       for(var lb=0; lb<lootBags.length; lb++){
         var b=lootBags[lb];
-        miniCtx.fillStyle='#f59e0b';
         miniCtx.fillRect(b.x*(mini.width/COLS)+1, b.y*(mini.height/ROWS)+1, 3,3);
       }
+      // coins
       miniCtx.fillStyle='#facc15';
       for(var i=0;i<coins.length;i++){ var c=coins[i]; miniCtx.fillRect(c.x*(mini.width/COLS)+1, c.y*(mini.height/ROWS)+1, 2,2); }
+      // potions
       miniCtx.fillStyle='#a78bfa';
       for(var p=0;p<potions.length;p++){ var po=potions[p]; miniCtx.fillRect(po.x*(mini.width/COLS)+1, po.y*(mini.height/ROWS)+1, 2,2); }
+      // enemies
       for(var eI=0;eI<enemies.length;eI++){ var en=enemies[eI]; miniCtx.fillStyle=(en.type==='ranged')?'#a855f7':'#ef4444';
         miniCtx.fillRect(en.x*(mini.width/COLS)+1, en.y*(mini.height/ROWS)+1, 3,3); }
+      // player
       miniCtx.fillStyle='#3b82f6'; miniCtx.fillRect(player.x*(mini.width/COLS)+1, player.y*(mini.height/ROWS)+1, 3,3);
+      // frame
       miniCtx.strokeStyle='#1f2a44'; miniCtx.strokeRect(0.5,0.5, mini.width-1, mini.height-1);
     }
 
