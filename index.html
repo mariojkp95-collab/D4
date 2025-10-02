@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Drakoria — INV-LOOT-FAB1</title>
+<title>Drakoria — CRIT-1-FULL</title>
 <style>
 :root{
   --bg:#0b1224; --panel:#0f172a; --stroke:#1f2a44; --text:#e5e7eb; --muted:#9ca3af;
@@ -25,7 +25,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 .fab{position:fixed;bottom:14px;width:56px;height:56px;border-radius:50%;border:1px solid #31406e;background:var(--accent);color:#fff;font-size:24px;line-height:56px;text-align:center;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:20}
 #btnUsePotion{ right:14px }
 #btnAttack{ right:82px }
-#btnLoot{ right:150px; display:none } /* nuovo: appare sopra un sacco */
+#btnLoot{ right:150px; display:none } /* appare quando sei su un sacco */
 #atkCdCanvas{ position:fixed; right:82px; bottom:14px; width:56px; height:56px; z-index:21; pointer-events:none }
 .err{position:fixed;left:50%;top:70px;transform:translateX(-50%);background:#7f1d1d;color:#fff;border:1px solid #fecaca;border-radius:8px;padding:8px 12px;z-index:50;font-weight:600;max-width:90vw;white-space:pre-wrap}
 
@@ -108,7 +108,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   <canvas id="game" width="960" height="576" aria-label="Gioco"></canvas>
   <p class="help">
     Tap per muoverti • tap su un <b>nemico</b> per selezionarlo • <b>doppio tap</b> per <b>auto-inseguire</b> •
-    <b>🗡️</b> / SPAZIO attacca • Entra su un <b>sacco</b> per raccogliere <span class="coin">monete</span>/<span class="potion">pozioni</span>.
+    <b>🗡️</b> / SPAZIO attacca • Entra su un <b>sacco</b> per loot.
   </p>
   <div id="status"></div>
 </main>
@@ -116,7 +116,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 <button id="btnAttack" class="fab" aria-label="Attacca">🗡️</button>
 <canvas id="atkCdCanvas" width="56" height="56" aria-hidden="true"></canvas>
 <button id="btnUsePotion" class="fab" aria-label="Usa pozione">🍵</button>
-<button id="btnLoot" class="fab" aria-label="Apri loot">👜</button> <!-- nuovo -->
+<button id="btnLoot" class="fab" aria-label="Apri loot">👜</button>
 
 <div id="miniWrap" class="hidden"><canvas id="mini" width="80" height="48" aria-label="Mini mappa"></canvas></div>
 
@@ -159,9 +159,9 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 <div id="errBox" class="err" style="display:none"></div>
 
 <script>
-/* ===== Drakoria — BUILD INV-LOOT-FAB1 ===== */
+/* ===== Drakoria — BUILD CRIT-1-FULL ===== */
 (function(){
-  var BUILD='INV-LOOT-FAB1';
+  var BUILD='CRIT-1-FULL';
   var SAVE_KEY='save_xrq1_inv';
   var QUEST_KEY='quests_xrq1_inv';
 
@@ -179,7 +179,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   var errBox=document.getElementById('errBox');
   var atkCdCanvas=document.getElementById('atkCdCanvas'), atkCdCtx=atkCdCanvas.getContext('2d');
   var lootWin=document.getElementById('lootWin'), lootBody=document.getElementById('lootBody'), lootClose=document.getElementById('lootClose'), lootTakeAll=document.getElementById('lootTakeAll');
-  var btnLoot=document.getElementById('btnLoot'); // nuovo FAB loot
+  var btnLoot=document.getElementById('btnLoot');
 
   function panic(where, e){
     errBox.style.display='block';
@@ -188,7 +188,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   }
 
   try{
-    // ===== PRIMA di randEmpty/tileFree =====
+    // ===== Dati runtime =====
     var lootBags=[];        // {x,y,items:[...], createdAt, ttlMs}
     var nextItemId=1;
 
@@ -203,11 +203,34 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
     // --- PLAYER / ENEMY
     var _eid=1; function giveId(e){ e.id=_eid++; return e; }
-    var player={ x:1,y:1, baseMaxHp:100, baseAtkMin:6, baseAtkMax:12, maxHp:100, hp:100, atkMin:6, atkMax:12, coins:0,pots:1,lastAtk:0,atkCd:450,lvl:1,exp:0 };
+    var player={
+      x:1,y:1,
+      baseMaxHp:100, baseAtkMin:6, baseAtkMax:12,
+      maxHp:100, hp:100, atkMin:6, atkMax:12,
+      coins:0,pots:1,lastAtk:0,atkCd:450,lvl:1,exp:0,
+      // crit
+      critChance:0.10, critMult:1.5
+    };
     recomputeStats(true);
 
-    function makeSlime(x,y){ return giveId({ kind:'slime', type:'melee', x:x, y:y, spawnX:x, spawnY:y, hp:60,maxHp:60, atkMin:5,atkMax:9, hitCd:800,lastHit:0, aggro:false, aggroRange:5, leashRange:15, loseAggroMs:6000, lastSeenTs:0, moveTick:0, moveEvery:6, path:[], mode:'idle' }); }
-    function makeArcher(x,y){ return giveId({ kind:'archer', type:'ranged', x:x, y:y, spawnX:x, spawnY:y, hp:40,maxHp:40, atkCd:1200,lastShot:0, rangeMin:3, rangeMax:7, pokeCd:700,lastPoke:0, aggro:false, aggroRange:7, leashRange:15, loseAggroMs:6000, lastSeenTs:0, moveTick:0, moveEvery:6, path:[], mode:'idle' }); }
+    function makeSlime(x,y){
+      return giveId({
+        kind:'slime', type:'melee', x:x, y:y, spawnX:x, spawnY:y,
+        hp:60,maxHp:60, atkMin:5,atkMax:9,
+        hitCd:800,lastHit:0,
+        aggro:false, aggroRange:5, leashRange:15, loseAggroMs:6000, lastSeenTs:0,
+        moveTick:0, moveEvery:6, path:[], mode:'idle'
+      });
+    }
+    function makeArcher(x,y){
+      return giveId({
+        kind:'archer', type:'ranged', x:x, y:y, spawnX:x, spawnY:y,
+        hp:40,maxHp:40, atkCd:1200,lastShot:0, rangeMin:3, rangeMax:7,
+        pokeCd:700,lastPoke:0,
+        aggro:false, aggroRange:7, leashRange:15, loseAggroMs:6000, lastSeenTs:0,
+        moveTick:0, moveEvery:6, path:[], mode:'idle'
+      });
+    }
     var enemies=[ makeSlime(COLS-2,ROWS-2), makeArcher(COLS-4,2) ];
 
     // OGGETTI + PROIETTILI
@@ -282,6 +305,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     function chebyshev(a,b){ var dx=Math.abs(a.x-b.x), dy=Math.abs(a.y-b.y); return dx>dy?dx:dy; }
     function rndInt(a,b){ return a+((Math.random()*(b-a+1))|0); }
     function getVar(n){ var cs = window.getComputedStyle(document.documentElement); return cs.getPropertyValue(n).trim(); }
+    function rollCrit(chance){ return Math.random() < (chance||0); }
 
     function tileFree(x,y){
       if(map[y][x]!==0) return false;
@@ -392,7 +416,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     slot1.addEventListener('click', function(){ usePotion(); }, false);
     slot1.addEventListener('touchend', function(e){ e.preventDefault(); usePotion(); }, false);
 
-    // === Inventario: binding robusti (click + touch)
+    // Inventario: binding (click + touch)
     btnInventory.onclick = function(){ invWin.classList.toggle('hidden'); renderInventory(); };
     btnInventory.addEventListener('touchend', function(e){ e.preventDefault(); invWin.classList.toggle('hidden'); renderInventory(); }, false);
     invClose.onclick = function(){ invWin.classList.add('hidden'); };
@@ -413,8 +437,15 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
     function attackEnemy(t){
       var now=performance.now(); player.lastAtk=now;
-      var dmg=rndInt(player.atkMin,player.atkMax);
-      t.hp=Math.max(0,t.hp-dmg); addDmgText(t.x,t.y,'-'+dmg,'#ffd166'); flashCircle(t.x,t.y,'#ff0000',0.25,26);
+      var base=rndInt(player.atkMin,player.atkMax);
+      var isCrit = rollCrit(player.critChance);
+      var dmg = Math.floor(base * (isCrit ? player.critMult : 1));
+      t.hp=Math.max(0,t.hp-dmg);
+
+      // feedback
+      addDmgText(t.x,t.y,(isCrit?'CRIT ':'-')+dmg, isCrit ? '#facc15' : '#ffd166');
+      flashCircle(t.x,t.y, isCrit ? '#ffd166' : '#ff0000', isCrit?0.35:0.25, isCrit?30:26);
+
       t.aggro=true; t.lastSeenTs=now;
 
       if(t.hp===0){
@@ -466,15 +497,14 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     function makeWeapon(name, icon, rarity, atkBonus){ return {id: nextItemId++, name, icon, rarity, type:'weapon', slot:'weapon', atkBonus: atkBonus||0}; }
     function makeArmor(name, icon, rarity, hpBonus){ return {id: nextItemId++, name, icon, rarity, type:'armor', slot:'armor', hpBonus: hpBonus||0}; }
 
-    // === PATCH: loot smart (comuni auto-pick con toast, altrimenti finestra)
+    // Loot smart: comuni auto-pick con toast; altrimenti finestra + FAB 👜
     function openLootIfAny(){
       var bag = getBagAt(player.x, player.y);
       if(!bag) { btnLoot.style.display='none'; return; }
 
-      // mostra FAB 👜 quando stai su un sacco
-      btnLoot.style.display='block';
+      btnLoot.style.display='block'; // mostra FAB quando sei sul sacco
 
-      // Se comune-only → auto-pick con messaggio
+      // Solo monete/pozioni?
       var commonOnly = true;
       for (var i = 0; i < bag.items.length; i++) {
         var t = bag.items[i].type;
@@ -501,7 +531,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
         return;
       }
 
-      // Se ci sono item non-comuni, apri la finestra (oppure l’utente può premere 👜)
+      // Se ci sono item non-comuni, apri la finestra (e lascio il FAB visibile)
       renderLoot(bag);
       lootWin.classList.remove('hidden');
     }
@@ -533,7 +563,6 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       draw(); drawMini(); updateHotbarCounts();
     }
 
-    // === FAB 👜 manuale: apre/gestisce loot se sei su un sacco
     btnLoot.addEventListener('click', function(){
       var bag = getBagAt(player.x, player.y);
       if(!bag){ btnLoot.style.display='none'; return; }
@@ -720,8 +749,13 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
               }
               var near = (Math.abs(e.x-player.x)+Math.abs(e.y-player.y))<=1;
               if(near && (now-e.lastHit)>=e.hitCd){
-                e.lastHit=now; var dmg=rndInt(e.atkMin,e.atkMax);
-                player.hp=Math.max(0,player.hp-dmg); addDmgText(player.x,player.y,'-'+dmg,'#ff6b6b'); flashCircle(player.x,player.y,'#ff0000',0.25,26);
+                e.lastHit=now;
+                var base=rndInt(e.atkMin,e.atkMax);
+                var isCrit = rollCrit(0.05);
+                var dmg=Math.floor(base*(isCrit?1.5:1));
+                player.hp=Math.max(0,player.hp-dmg);
+                addDmgText(player.x,player.y,(isCrit?'CRIT ':'-')+dmg, isCrit?'#f59e0b':'#ff6b6b');
+                flashCircle(player.x,player.y, isCrit?'#f59e0b':'#ff0000', isCrit?0.35:0.25, isCrit?30:26);
                 if(player.hp===0) gameOver();
               }
             } else { // ranged
@@ -749,8 +783,13 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
               }
               var adj = (Math.max(Math.abs(e.x-player.x),Math.abs(e.y-player.y))===1);
               if(adj && (now-e.lastPoke)>=e.pokeCd){
-                e.lastPoke=now; var dmg2=rndInt(4,7);
-                player.hp=Math.max(0,player.hp-dmg2); addDmgText(player.x,player.y,'-'+dmg2,'#ff6b6b'); flashCircle(player.x,player.y,'#ff0000',0.25,26);
+                e.lastPoke=now;
+                var base2=rndInt(4,7);
+                var isCrit2 = rollCrit(0.05);
+                var dmg2=Math.floor(base2*(isCrit2?1.5:1));
+                player.hp=Math.max(0,player.hp-dmg2);
+                addDmgText(player.x,player.y,(isCrit2?'CRIT ':'-')+dmg2, isCrit2?'#f59e0b':'#ff6b6b');
+                flashCircle(player.x,player.y, isCrit2?'#f59e0b':'#ff0000', isCrit2?0.35:0.25, isCrit2?30:26);
                 if(player.hp===0) gameOver();
               }
             }
@@ -773,8 +812,14 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
           var nx=pr.x+pr.dx, ny=pr.y+pr.dy;
           if(!inside(nx,ny) || map[ny][nx]===1){ projectiles.splice(pi,1); continue; }
           if(nx===player.x && ny===player.y){
-            var dmgp=pr.dmg; player.hp=Math.max(0,player.hp-dmgp); addDmgText(player.x,player.y,'-'+dmgp,'#ff6b6b'); flashCircle(player.x,player.y,'#ff0000',0.25,26);
-            projectiles.splice(pi,1); if(player.hp===0) gameOver(); continue;
+            var isCrit = rollCrit(0.05);
+            var dmgp = Math.floor(pr.dmg * (isCrit?1.5:1));
+            player.hp=Math.max(0,player.hp-dmgp);
+            addDmgText(player.x,player.y,(isCrit?'CRIT ':'-')+dmgp, isCrit?'#f59e0b':'#ff6b6b');
+            flashCircle(player.x,player.y, isCrit?'#f59e0b':'#ff0000', isCrit?0.35:0.25, isCrit?30:26);
+            projectiles.splice(pi,1);
+            if(player.hp===0) gameOver();
+            continue;
           }
           pr.x=nx; pr.y=ny;
         }
@@ -850,7 +895,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
       drawDmgTexts();
       drawXpBar();
-      statusEl.textContent = 'build: '+BUILD+' | LV '+player.lvl+' | HP '+player.hp+'/'+player.maxHp+' | ATK '+player.atkMin+'–'+player.atkMax+' | coins '+player.coins+' | pots '+player.pots+(target?' | target '+(autoChase?'AUTO':'LOCK'):'');
+      statusEl.textContent = 'build: '+BUILD+' | LV '+player.lvl+' | HP '+player.hp+'/'+player.maxHp+' | ATK '+player.atkMin+'–'+player.atkMax+' | coins '+player.coins+' | pots '+player.pots+' | crit '+Math.round(player.critChance*100)+'%';
       ctx.fillStyle='#ffffffcc'; ctx.font='bold 14px system-ui'; ctx.fillText('BUILD '+BUILD, 8, 24);
     }
 
