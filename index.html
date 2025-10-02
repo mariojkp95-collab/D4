@@ -505,10 +505,13 @@ function checkPortalAndTeleport(){
   logSys('Teletrasporto: ' + (WORLD.current==='spawn'?'Spawn':'Main'));
   draw(); drawMini();
 }
+// ... definizione buildMap(...)
+
+// OGGETTI + PROIETTILI
+var coins=[], potions=[], projectiles=[];
+
 // inizializza la mappa iniziale
 buildMap('spawn');
-    // OGGETTI + PROIETTILI
-var coins=[], potions=[], projectiles=[];
 
 // Popola oggetti iniziali SOLO nella mappa principale
 if (WORLD.current === 'main') {
