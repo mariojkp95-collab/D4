@@ -399,7 +399,7 @@ var WORLD = {
 
 // ricostruisce la mappa e (se serve) svuota/spawna elementi
 function buildMap(name){
-buildMap('main'); // mappa iniziale = main
+// mappa iniziale = main
   WORLD.current = name;
 
   // 1) palette visiva per distinguere le mappe (senza cambiare il tuo draw)
@@ -474,6 +474,8 @@ function checkPortalAndTeleport(){
     var coins=[], potions=[], projectiles=[];
     for(var i1=0;i1<4;i1++) coins.push(randEmpty());
     for(var i2=0;i2<1;i2++) potions.push(randEmpty());
+    // inizializza la mappa iniziale
+buildMap('main');
 
     // TARGET LOCK + AUTO-CHASE
     var target=null, autoChase=false, lastEnemyTapTs=0, lastEnemyTapId=-1;
@@ -1406,9 +1408,6 @@ checkPortalAndTeleport();
     function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
 
   }catch(e){ panic('boot', e); }
-
-  // loop tick
-  setInterval(step,120);
 
 })();
 </script>
