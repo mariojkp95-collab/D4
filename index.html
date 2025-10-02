@@ -1329,261 +1329,372 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
 })();
 </script>
-  <!-- PATCH-02: Drag&Drop inventario → hotbar + Abilità → hotbar + Pozione in "Consumabili" -->
+  <!-- PATCH-01: cooldown grafico pozione (slot1) -->
 <script>
 (function(){
-  // ---- CONFIG ----
-  const SLOT_IDS = [null,'slot1','slot2','slot3','slot4','slot5'];
-  const CAP_IDS  = [null,'slotCap1','slotCap2','slotCap3','slotCap4','slotCap5'];
-  const CD_IDS   = [null,'cd1','cd2','cd3','cd4','cd5'];
+  const CD_MS = 5000; // 5s
 
-  // ---- UTILITY DOM ----
-  const $ = sel => document.querySelector(sel);
-  const $$ = sel => Array.from(document.querySelectorAll(sel));
-
-  function toastSafe(msg){ try{ (window.statusEl||$('#status')).textContent = msg; }catch(e){} }
-
-  // Overlay esistente (dalla PATCH-01)
-  function setSlotIcon(slot, icon){
-    const el = document.getElementById(CAP_IDS[slot]); if(el) el.textContent = icon || '—';
+  function injectCss(){
+    if(document.getElementById('patch01-css')) return;
+    const st = document.createElement('style');
+    st.id='patch01-css';
+    st.textContent = `
+      .slot .cd{position:absolute; inset:0; border-radius:10px;
+        background: conic-gradient(#0000 0deg, #0008 0deg); pointer-events:none}
+      .slot.cooldown{ filter: grayscale(.15); opacity:.9 }
+    `;
+    document.head.appendChild(st);
+  }
+  function ensureOverlay(){
+    for(let i=1;i<=5;i++){
+      const slot = document.getElementById('slot'+i);
+      if(!slot) continue;
+      if(!slot.querySelector('.cd')){
+        const span=document.createElement('span'); span.className='cd'; span.id='cd'+i;
+        slot.appendChild(span);
+      }
+    }
   }
 
-  // Salviamo il binding anche su dataset dello slot, così "activateSlot" interno resta valido
-  // e noi abbiamo un fallback in caso serva.
+  let cdEnd = 0;
+  function startCd(){
+    cdEnd = performance.now() + CD_MS;
+    const s1=document.getElementById('slot1');
+    if(s1) s1.classList.add('cooldown');
+    raf();
+  }
+  function raf(){
+    if(!cdEnd) return;
+    const now=performance.now(), left=cdEnd-now, el=document.getElementById('cd1');
+    if(!el) return;
+    if(left>0){
+      const ratio = Math.max(0,Math.min(1,left/CD_MS));
+      const deg = Math.floor(360*ratio);
+      el.style.background = 'conic-gradient(#0008 '+deg+'deg, #0000 '+deg+'deg)';
+      requestAnimationFrame(raf);
+    } else {
+      document.getElementById('slot1')?.classList.remove('cooldown');
+      el.style.background = 'conic-gradient(#0000 0deg, #0008 0deg)';
+      cdEnd=0;
+    }
+  }
+
+  function setup(){
+    injectCss();
+    ensureOverlay();
+
+    const slot1=document.getElementById('slot1');
+    const fab=document.getElementById('btnUsePotion');
+
+    // Avvio cooldown SOLO se il contatore pozioni è sceso dopo il tap
+    function tryStartAfterUse(){
+      const elCnt=document.getElementById('cntPot');
+      const before = elCnt ? elCnt.textContent.trim() : '';
+      setTimeout(function(){
+        const after = elCnt ? elCnt.textContent.trim() : '';
+        if(after!==before){ startCd(); } // usata davvero
+      }, 40);
+    }
+
+    slot1?.addEventListener('click', tryStartAfterUse, true);
+    fab?.addEventListener('click', tryStartAfterUse, true);
+    fab?.addEventListener('touchend', tryStartAfterUse, {passive:true});
+
+    // Safety all'avvio
+    document.getElementById('slot1')?.classList.remove('cooldown');
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', setup);
+  else setup();
+})();
+</script>
+<!-- /PATCH-01 -->
+  <!-- PATCH-02b: DnD + Picker per Pozioni e Abilità; attivazione slot 2–5 -->
+<script>
+(function(){
+  const SLOT_IDS=[null,'slot1','slot2','slot3','slot4','slot5'];
+  const CAP_IDS =[null,'slotCap1','slotCap2','slotCap3','slotCap4','slotCap5'];
+
+  const $ = s=>document.querySelector(s);
+  const $$ = s=>Array.from(document.querySelectorAll(s));
+
+  /* ------- 0) UI: slot picker minimale (1..5) ------- */
+  function ensurePicker(){
+    if($('#patchPicker')) return;
+    const div=document.createElement('section');
+    div.id='patchPicker';
+    div.style.cssText='position:fixed;inset:0;display:none;place-items:center;z-index:2000;background:rgba(0,0,0,.4)';
+    div.innerHTML=`
+      <div style="background:#0f172a;border:1px solid #1f2a44;border-radius:12px;padding:12px;box-shadow:0 18px 44px rgba(0,0,0,.45);width:320px;max-width:90vw">
+        <div style="font-weight:700;margin-bottom:8px">Scegli slot</div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
+          ${[1,2,3,4,5].map(n=>`<button class="ppick" data-s="${n}" style="padding:10px;background:#1e40af;border:1px solid #31406e;color:#fff;border-radius:10px">${n}</button>`).join('')}
+        </div>
+        <div style="text-align:right;margin-top:10px">
+          <button id="ppClose" style="padding:6px 10px;background:#26325a;border:1px solid #31406e;color:#fff;border-radius:8px">Annulla</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(div);
+  }
+  let pickerCb=null;
+  function openPicker(cb){ ensurePicker(); pickerCb=cb; const w=$('#patchPicker'); w.style.display='grid'; }
+  function closePicker(){ const w=$('#patchPicker'); if(w) w.style.display='none'; pickerCb=null; }
+  document.addEventListener('click', function(ev){
+    const t=ev.target;
+    if(t && t.id==='ppClose'){ closePicker(); }
+    if(t && t.classList && t.classList.contains('ppick')){
+      const s=+t.getAttribute('data-s'); const cb=pickerCb; closePicker(); if(cb) cb(s);
+    }
+  }, false);
+
+  /* ------- 1) Helper binding sugli slot (dataset + icona) ------- */
+  function setSlotIcon(slot, icon){ const c=document.getElementById(CAP_IDS[slot]); if(c) c.textContent=icon||'—'; }
   function setSlotBinding(slot, binding){ // {kind:'potion'|'item'|'ability', icon, itemId?, abId?, type?}
-    const el = document.getElementById(SLOT_IDS[slot]); if(!el) return;
-    el.dataset.kind   = binding && binding.kind   || '';
-    el.dataset.icon   = binding && binding.icon   || '';
-    el.dataset.itemId = binding && binding.itemId || '';
-    el.dataset.abId   = binding && binding.abId   || '';
-    el.dataset.type   = binding && binding.type   || '';
-    setSlotIcon(slot, binding && binding.icon);
+    const el=document.getElementById(SLOT_IDS[slot]); if(!el) return;
+    el.dataset.kind=binding.kind||''; el.dataset.icon=binding.icon||'';
+    el.dataset.itemId=binding.itemId||''; el.dataset.abId=binding.abId||''; el.dataset.type=binding.type||'';
+    setSlotIcon(slot, binding.icon||'—');
   }
 
-  // ---- HOTBAR: abilita drop sugli slot 1–5 ----
+  /* ------- 2) Abilita drop sugli slot 1–5 ------- */
   function enableSlotDrops(){
-    for(let s=1; s<=5; s++){
-      const slotEl = document.getElementById(SLOT_IDS[s]);
-      if(!slotEl) continue;
-      if(slotEl._dndEnabled) continue;
-      slotEl._dndEnabled = true;
-
-      slotEl.addEventListener('dragover', e => { e.preventDefault(); }, false);
-      slotEl.addEventListener('drop', e => {
+    for(let s=1;s<=5;s++){
+      const el=document.getElementById(SLOT_IDS[s]); if(!el||el._dndEnabled) continue; el._dndEnabled=true;
+      el.addEventListener('dragover', e=>{ e.preventDefault(); }, false);
+      el.addEventListener('drop', e=>{
         e.preventDefault();
-        const data = e.dataTransfer.getData('text/plain') || '';
-        // Formati supportati: "item:<id>|type:<type>|icon:<icon>"  oppure  "ability:<id>|icon:<icon>"
+        const data = e.dataTransfer.getData('text/plain')||'';
         if(data.startsWith('ability:')){
-          const abId = (data.match(/ability:([^|]+)/)||[])[1];
-          const icon = decodeURIComponent((data.match(/icon:([^|]+)/)||[])[1]||'✨');
-          if(!abId){ toastSafe('Abilità non riconosciuta'); return; }
-          setSlotBinding(s, {kind:'ability', icon:icon, abId:abId});
-          toastSafe('Abilità assegnata allo slot '+s);
+          const abId  =(data.match(/ability:([^|]+)/)||[])[1];
+          const icon  =decodeURIComponent((data.match(/icon:([^|]+)/)||[])[1]||'✨');
+          if(!abId) return;
+          setSlotBinding(s,{kind:'ability',icon,abId});
+          toast('Abilità assegnata allo slot '+s);
           return;
         }
         if(data.startsWith('item:')){
-          const id   = (data.match(/item:([^|]+)/)||[])[1];
-          const type = (data.match(/type:([^|]+)/)||[])[1];
-          const icon = decodeURIComponent((data.match(/icon:([^|]+)/)||[])[1]||'❖');
-          // Consentiamo "potion" e "consumable". Altri tipi si potranno abilitare più avanti.
-          if(type!=='potion' && type!=='consumable'){
-            toastSafe('Solo consumabili in barra rapida');
-            return;
-          }
-          setSlotBinding(s, {kind:(type==='potion'?'potion':'item'), icon:icon, itemId:id, type:type});
-          toastSafe('Oggetto assegnato allo slot '+s);
-          return;
+          const type =(data.match(/type:([^|]+)/)||[])[1];
+          const icon =decodeURIComponent((data.match(/icon:([^|]+)/)||[])[1]||'❖');
+          if(type!=='potion' && type!=='consumable'){ toast('Solo consumabili/pozioni in barra'); return; }
+          const id=(data.match(/item:([^|]+)/)||[])[1]||'';
+          setSlotBinding(s,{kind:(type==='potion'?'potion':'item'),icon,itemId:id,type});
+          toast('Oggetto assegnato allo slot '+s);
         }
       }, false);
     }
   }
 
-  // ---- INVENTARIO: aggiungi "Pozione xN" nella scheda Consumabili ----
-  function ensurePotionInInventoryView(){
-    const invGrid = document.getElementById('invGrid');
-    if(!invGrid || !invGrid.isConnected) return;
+  /* ------- 3) INVENTARIO: Pozione in "Consumabili" + drag + long-press + “→ Barra” ------- */
+  function ensurePotionCard(){
+    const grid=$('#invGrid'); if(!grid) return;
+    let card=grid.querySelector('[data-patch02b="potion"]');
+    const cntEl=$('#cntPot'); const qty = cntEl ? parseInt(cntEl.textContent.trim(),10)||0 : 0;
 
-    // evita doppioni
-    if(invGrid.querySelector('[data-patch02="potion-row"]')) return;
+    if(!card){
+      card=document.createElement('div');
+      card.className='invItem r-com';
+      card.setAttribute('data-patch02b','potion');
+      card.draggable=true;
+      card.innerHTML=`
+        <div class="cap">🍵 Pozione ×<span class="qv">${qty}</span></div>
+        <div class="row">
+          <button class="act use">Usa</button>
+          <button class="act tobar">→ Barra</button>
+        </div>`;
+      // drag (desktop)
+      card.addEventListener('dragstart', e=>{
+        e.dataTransfer.setData('text/plain', `item:__potion__|type:potion|icon:${encodeURIComponent('🍵')}`);
+        e.dataTransfer.setDragImage(new Image(),0,0);
+      }, false);
+      // long-press (mobile) per scegliere slot
+      ;(function(){
+        let tid=null;
+        card.addEventListener('touchstart', ()=>{ tid=setTimeout(()=>{ openPicker(s=>setSlotBinding(s,{kind:'potion',icon:'🍵'})); },450); }, {passive:true});
+        card.addEventListener('touchend', ()=>{ if(tid){clearTimeout(tid);tid=null;} }, {passive:true});
+        card.addEventListener('touchmove', ()=>{ if(tid){clearTimeout(tid);tid=null;} }, {passive:true});
+      })();
+      // pulsanti
+      card.querySelector('.use').addEventListener('click', ()=>{
+        $('#btnUsePotion')?.click();
+        setTimeout(()=>{ const qv=card.querySelector('.qv'); if(qv&&cntEl) qv.textContent=cntEl.textContent.trim(); },60);
+      }, false);
+      card.querySelector('.tobar').addEventListener('click', ()=>{
+        openPicker(s=>{ setSlotBinding(s,{kind:'potion',icon:'🍵'}); toast('Pozione assegnata allo slot '+s); });
+      }, false);
 
-    // leggiamo il contatore già mostrato nell'hotbar
-    const cntEl = document.getElementById('cntPot');
-    const qty = cntEl ? parseInt(cntEl.textContent.trim(),10)||0 : 0;
-
-    // se l'utente NON è sulla tab "Consumabili", potremmo decidere di non aggiungerlo.
-    // In pratica lo aggiungiamo sempre ma con stile identico agli altri.
-    const card = document.createElement('div');
-    card.className = 'invItem r-com';
-    card.setAttribute('data-patch02','potion-row');
-    card.setAttribute('data-type','potion');
-    card.setAttribute('data-id','__potion__'); // pseudo id
-    card.draggable = true;
-
-    card.innerHTML = `
-      <div class="cap">🍵 Pozione ×<span class="qv">${qty}</span></div>
-      <div class="row">
-        <button class="act use">Usa</button>
-        <button class="act tobar">→ Barra</button>
-      </div>
-    `;
-
-    // dragstart: codifichiamo come item di tipo "potion"
-    card.addEventListener('dragstart', function(e){
-      const icon = encodeURIComponent('🍵');
-      e.dataTransfer.setData('text/plain', `item:__potion__|type:potion|icon:${icon}`);
-      e.dataTransfer.setDragImage(new Image(), 0, 0);
-    }, false);
-
-    // click "Usa": usa la pozione reale (chiama il bottone FAB/slot 1)
-    card.querySelector('.use').addEventListener('click', function(){
-      const before = cntEl ? cntEl.textContent.trim() : '';
-      // usiamo lo stesso flusso dell'hotbar: tasto FAB
-      const fab = document.getElementById('btnUsePotion');
-      if(fab){ fab.click(); }
-      setTimeout(()=>{ // aggiorna quantità mostrata
-        const after = cntEl ? cntEl.textContent.trim() : '';
-        const qv = card.querySelector('.qv');
-        if(qv) qv.textContent = after || '0';
-        if(after!==before){ toastSafe('Pozione usata'); }
-      }, 50);
-    }, false);
-
-    // click "→ Barra": assegna a uno slot (default: primo slot vuoto, altrimenti 1)
-    card.querySelector('.tobar').addEventListener('click', function(){
-      // scegli il primo slot libero, altrimenti slot1
-      let target = 1;
-      for(let s=1;s<=5;s++){
-        const el = document.getElementById(SLOT_IDS[s]);
-        if(el && !el.dataset.kind){ target=s; break; }
-      }
-      setSlotBinding(target, {kind:'potion', icon:'🍵'});
-      toastSafe('Pozione assegnata allo slot '+target);
-    }, false);
-
-    // Infila la card "Pozione" come prima voce dell'inventario
-    invGrid.insertBefore(card, invGrid.firstChild);
+      grid.insertBefore(card, grid.firstChild);
+    } else {
+      const qv=card.querySelector('.qv'); if(qv) qv.textContent=qty;
+    }
   }
 
-  // Quando l’inventario viene (ri)renderizzato, le card cambiano.
-  // Useremo un MutationObserver per:
-  // 1) iniettare la card "Pozione";
-  // 2) rendere trascinabili i consumabili già presenti;
   function observeInventory(){
-    const invGrid = document.getElementById('invGrid');
-    if(!invGrid) return;
-    if(invGrid._patch02Obs) return;
-
-    const obs = new MutationObserver(()=> {
-      // 1) aggiorna/aggiungi pozione
-      ensurePotionInInventoryView();
-
-      // 2) marca come draggable gli item consumabili esistenti (se hanno bottone "Usa" o "→ Barra")
-      $$('#invGrid .invItem').forEach(card=>{
-        if(card.getAttribute('data-patch02')==='potion-row') return; // già gestito
-        if(card._patch02_draggable_done) return;
-
-        // deduci tipo dalla presenza di testo, fallback: se vede "Usa" o "→ Barra", lo rendiamo draggable
-        const nameText = (card.querySelector('.cap')?.textContent || '').toLowerCase();
-        const isConsumable = nameText.includes('pozione') || nameText.includes('consum') || !!card.querySelector('.act');
-        if(!isConsumable) return;
-
-        // icona: prima emoji nel titolo, se c'è
-        let icon = '❖';
-        const cap = card.querySelector('.cap');
-        if(cap){
-          const m = cap.textContent.trim().match(/^[^\w\s]/);
-          if(m) icon = m[0];
-        }
-        const encIcon = encodeURIComponent(icon);
-
-        // id item: se non c'è, generiamo un pseudo-id dal testo (non perfetto, ma sufficiente per binding visuale)
-        let pid = card.getAttribute('data-id');
-        if(!pid){
-          pid = '__it__' + (cap ? cap.textContent.trim() : Math.random().toString(36).slice(2));
-          card.setAttribute('data-id', pid);
-        }
-
-        card.draggable = true;
-        card.addEventListener('dragstart', e=>{
-          e.dataTransfer.setData('text/plain', `item:${pid}|type:consumable|icon:${encIcon}`);
-          e.dataTransfer.setDragImage(new Image(), 0, 0);
-        }, false);
-
-        card._patch02_draggable_done = true;
-      });
-    });
-    obs.observe(invGrid, {childList:true, subtree:true});
-    invGrid._patch02Obs = obs;
-
-    // prima iniezione immediata
-    ensurePotionInInventoryView();
+    const grid=$('#invGrid'); if(!grid || grid._patch02b) return;
+    const mo=new MutationObserver(()=>{ ensurePotionCard(); makeConsumablesDraggable(); });
+    mo.observe(grid,{childList:true,subtree:true});
+    grid._patch02b=mo;
+    ensurePotionCard(); makeConsumablesDraggable();
   }
 
-  // ---- ABILITÀ: rendi ogni abilità trascinabile verso la hotbar ----
+  // Rende trascinabili anche altri consumabili già presenti nelle card dell'inventario
+  function makeConsumablesDraggable(){
+    $$('#invGrid .invItem').forEach(card=>{
+      if(card.getAttribute('data-patch02b')==='potion') return; // già gestito
+      if(card._dndDone) return;
+      const name=(card.querySelector('.cap')?.textContent||'').toLowerCase();
+      const isConsum = name.includes('consum') || name.includes('pozione') || card.querySelector('.act');
+      if(!isConsum) return;
+      // icona = prima emoji se presente
+      let icon='❖'; const m=(card.querySelector('.cap')?.textContent||'').trim().match(/^[^\w\s]/); if(m) icon=m[0];
+      const encIcon=encodeURIComponent(icon);
+      // id pseudo
+      let pid=card.getAttribute('data-id'); if(!pid){ pid='__it__'+Math.random().toString(36).slice(2); card.setAttribute('data-id',pid); }
+      // drag
+      card.draggable=true;
+      card.addEventListener('dragstart', e=>{
+        e.dataTransfer.setData('text/plain', `item:${pid}|type:consumable|icon:${encIcon}`);
+        e.dataTransfer.setDragImage(new Image(),0,0);
+      }, false);
+      // long-press -> picker
+      (function(){
+        let tid=null;
+        card.addEventListener('touchstart', ()=>{ tid=setTimeout(()=>{ openPicker(s=>setSlotBinding(s,{kind:'item',icon:icon,itemId:pid,type:'consumable'})); },450); }, {passive:true});
+        card.addEventListener('touchend', ()=>{ if(tid){clearTimeout(tid);tid=null;} }, {passive:true});
+        card.addEventListener('touchmove', ()=>{ if(tid){clearTimeout(tid);tid=null;} }, {passive:true});
+      })();
+      card._dndDone=true;
+    });
+  }
+
+  /* ------- 4) ABILITÀ: aggiungi “→ Barra”, drag & long-press ------- */
+  function enhanceAbilities(){
+    const grid=$('#abilGrid'); if(!grid) return;
+    $$('#abilGrid .abilItem').forEach(card=>{
+      if(card._patched) return;
+      const cap=card.querySelector('.cap'); let icon='✨'; if(cap){ const m=cap.textContent.trim().match(/^[^\w\s]/); if(m) icon=m[0]; }
+      const encIcon=encodeURIComponent(icon);
+      const name=(cap?.textContent||'abil').trim();
+      const abId='ab_'+name.toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'');
+
+      // Bottone → Barra
+      const row=card.querySelector('.row');
+      if(row){
+        const btn=document.createElement('button');
+        btn.className='btn'; btn.textContent='→ Barra';
+        btn.style.marginLeft='8px';
+        btn.addEventListener('click', ()=>{ openPicker(s=>{ setSlotBinding(s,{kind:'ability',icon,abId}); toast('Abilità assegnata allo slot '+s); }); }, false);
+        row.appendChild(btn);
+      }
+
+      // Drag (desktop)
+      card.draggable=true;
+      card.addEventListener('dragstart', e=>{
+        e.dataTransfer.setData('text/plain', `ability:${abId}|icon:${encIcon}`);
+        e.dataTransfer.setDragImage(new Image(),0,0);
+      }, false);
+
+      // Long-press (mobile)
+      (function(){
+        let tid=null;
+        card.addEventListener('touchstart', ()=>{ tid=setTimeout(()=>{ openPicker(s=>{ setSlotBinding(s,{kind:'ability',icon,abId}); toast('Abilità assegnata allo slot '+s); }); },450); }, {passive:true});
+        card.addEventListener('touchend', ()=>{ if(tid){clearTimeout(tid);tid=null;} }, {passive:true});
+        card.addEventListener('touchmove', ()=>{ if(tid){clearTimeout(tid);tid=null;} }, {passive:true});
+      })();
+
+      card._patched=true;
+    });
+  }
   function observeAbilities(){
-    const grid = document.getElementById('abilGrid');
-    if(!grid) return;
-    if(grid._patch02Obs) return;
-
-    const obs = new MutationObserver(()=>{
-      $$('#abilGrid .abilItem').forEach(card=>{
-        if(card._patch02_draggable_done) return;
-
-        // Prendo nome + icona dal titolo della card
-        const cap = card.querySelector('.cap');
-        let icon = '✨';
-        if(cap){
-          const m = cap.textContent.trim().match(/^[^\w\s]/);
-          if(m) icon = m[0];
-        }
-        const encIcon = encodeURIComponent(icon);
-
-        // cerco di ricavare un id stabile dall’etichetta (es. "Ondata Arcana")
-        const name = (cap?.textContent || 'abil').trim();
-        const abId = 'ab_' + name.toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'');
-
-        card.draggable = true;
-        card.addEventListener('dragstart', e=>{
-          e.dataTransfer.setData('text/plain', `ability:${abId}|icon:${encIcon}`);
-          e.dataTransfer.setDragImage(new Image(), 0, 0);
-        }, false);
-
-        card._patch02_draggable_done = true;
-      });
-    });
-    obs.observe(grid, {childList:true, subtree:true});
-    grid._patch02Obs = obs;
+    const grid=$('#abilGrid'); if(!grid || grid._patch02b) return;
+    const mo=new MutationObserver(()=>enhanceAbilities());
+    mo.observe(grid,{childList:true,subtree:true});
+    grid._patch02b=mo;
+    enhanceAbilities();
   }
 
-  // ---- Inizializzazione ----
-  function init(){
-    // 1) abilita drop sugli slot
-    enableSlotDrops();
-    // 2) osserva inventario e abilità (si accendono quando apri le finestre relative)
-    observeInventory();
-    observeAbilities();
+  /* ------- 5) USO DAGLI SLOT (2–5 inclusi) ------- */
+  // Intercettiamo il tap sugli slot: se è bound a pozione -> click sul bottone ufficiale (così parte anche il cooldown della PATCH-01)
+  // Se è un'abilità -> proviamo a "cliccare" il bottone Lancia della finestra Abilità (apri/chiudi al volo se serve)
+  function onSlotTap(slot){
+    const el=document.getElementById(SLOT_IDS[slot]); if(!el) return;
+    const kind=el.dataset.kind||'';
+    if(kind==='potion'){
+      $('#btnUsePotion')?.click(); // usa il flusso ufficiale (contatori, log, cooldown)
+      return;
+    }
+    if(kind==='item'){
+      // fallback semplice: apri inventario e invita l'uso manuale (oppure estendiamo qui con regole specifiche)
+      // per ora mostriamo solo un toast
+      toast('Consumabile assegnato allo slot '+slot+'. Premi l\'inventario per usarlo se non ha effetto diretto.');
+      return;
+    }
+    if(kind==='ability'){
+      const abId=el.dataset.abId;
+      triggerAbility(abId);
+      return;
+    }
+  }
 
-    // 3) aggiorna card Pozione ogni volta che cambia il contatore nell'hotbar
-    const cnt = document.getElementById('cntPot');
-    if(cnt && !cnt._patch02Obs){
-      const o = new MutationObserver(()=> {
-        // se l'inventario è aperto, sincronizza quantità visualizzata
-        const qv = $('#invGrid [data-patch02="potion-row"] .qv');
-        if(qv) qv.textContent = cnt.textContent.trim();
+  function triggerAbility(abId){
+    if(!abId) return;
+    const btnAbilities=$('#btnAbilities'), abilWin=$('#abilWin');
+    const wasHidden = abilWin && abilWin.classList.contains('hidden');
+    // apri se chiusa
+    if(wasHidden) btnAbilities?.click();
+    // assicurati che i contenuti ci siano
+    setTimeout(()=>{
+      // prova a trovare un bottone "Lancia" dentro la card corrispondente
+      const card = $$('#abilGrid .abilItem').find(c=>{
+        const cap=c.querySelector('.cap')?.textContent||'';
+        const id='ab_'+cap.toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'');
+        return id===abId;
       });
-      o.observe(cnt, {characterData:true, childList:true, subtree:true});
-      cnt._patch02Obs = o;
+      const btn = card?.querySelector('.btn');
+      if(btn){ btn.click(); toast('Lanci abilità.'); }
+      // richiudi se era chiusa
+      if(wasHidden) $('#abilClose')?.click();
+    }, 30);
+  }
+
+  function hookSlotsTap(){
+    for(let s=1;s<=5;s++){
+      const el=document.getElementById(SLOT_IDS[s]); if(!el) continue;
+      if(el._tapHooked) continue; el._tapHooked=true;
+      const handler=(e)=>{ e.preventDefault(); e.stopPropagation(); onSlotTap(s); };
+      el.addEventListener('click', handler, true);
+      el.addEventListener('touchend', handler, {passive:false,capture:true});
+    }
+  }
+
+  /* ------- 6) Helper UI ------- */
+  function toast(msg){ try{ (window.statusEl||$('#status')).textContent='[PATCH-02b] '+msg; }catch(e){} }
+
+  /* ------- 7) Bootstrap ------- */
+  function init(){
+    ensurePicker();
+    enableSlotDrops();
+    hookSlotsTap();
+
+    // Osserva quando apri Inventory/Abilities per attivare le funzioni
+    const invBtn=$('#btnInventory'); invBtn?.addEventListener('click', ()=> setTimeout(observeInventory,10), false);
+    const abBtn=$('#btnAbilities');  abBtn ?.addEventListener('click', ()=> setTimeout(observeAbilities,10), false);
+
+    // Sincronizza quantità pozioni anche senza riaprire inventario
+    const cnt=$('#cntPot');
+    if(cnt && !cnt._p02b){
+      const mo=new MutationObserver(()=>{ const card=$('#invGrid [data-patch02b="potion"] .qv'); if(card) card.textContent=cnt.textContent.trim(); });
+      mo.observe(cnt,{characterData:true,childList:true,subtree:true});
+      cnt._p02b=mo;
     }
 
-    // 4) se ricarichi senza aver aperto ancora inventario/abilità, non succede nulla: la patch si attiva quando apri quelle finestre.
-    toastSafe('Patch drag&drop attiva');
+    toast('Drag&Drop + hotbar binding attivi');
   }
-
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 
 })();
 </script>
-<!-- /PATCH-02 -->
+<!-- /PATCH-02b -->
 </body>
 </html>
