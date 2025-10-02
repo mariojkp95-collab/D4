@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Drakoria — D3-SAFE-HUD1-COMPAT</title>
+<title>Drakoria — D3-COMPAT-XRQ1</title>
 <style>
 :root{
   --bg:#0b1224; --panel:#0f172a; --stroke:#1f2a44; --text:#e5e7eb; --muted:#9ca3af;
@@ -32,12 +32,31 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   background:#7f1d1d;color:#fff;border:1px solid #fecaca;border-radius:8px;
   padding:8px 12px;z-index:50;font-weight:600;max-width:90vw;white-space:pre-wrap
 }
+/* Quest panel */
+.quest{
+  position: fixed; top: 16px; right: 16px; width: 280px;
+  background:#0f172a; border:1px solid #1f2a44; border-radius:10px;
+  box-shadow:0 12px 28px rgba(0,0,0,.35); z-index:30
+}
+.hidden{display:none}
+.q-header{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid #1f2a44;font-weight:600}
+.q-close{width:28px;height:28px;border-radius:6px;border:1px solid #31406e;background:#26325a;color:#fff;font-size:16px;cursor:pointer}
+.q-body{padding:10px}
+.q-title{font-weight:700;margin-bottom:6px}
+.q-desc{color:#c7cad1;margin-bottom:8px}
+.q-row{display:flex;justify-content:space-between;align-items:center;margin:8px 0}
+.progress{width:100%;height:10px;background:#0b1224;border:1px solid #1f2a44;border-radius:6px;overflow:hidden}
+.progress>div{height:100%;background:var(--accent);width:0%}
+.q-reward{color:#d1fae5;margin-top:6px;font-size:13px}
+.q-claim{width:100%;margin-top:10px;padding:8px 10px;border:1px solid #31406e;background:#2563eb;color:#fff;border-radius:8px;cursor:pointer}
+.q-claim:disabled{background:#1f2a44;color:#9aa0ad;cursor:not-allowed}
 </style>
 </head>
 <body>
 <header>
   <div><strong>Drakoria</strong> <span class="muted">core</span></div>
   <div>
+    <button id="btnQuest">Quest</button>
     <button id="btnSave">Save</button>
     <button id="btnLoad">Load</button>
     <button id="btnReset">Reset</button>
@@ -57,17 +76,29 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 <canvas id="atkCdCanvas" width="56" height="56" aria-hidden="true"></canvas>
 <button id="btnUsePotion" class="fab" aria-label="Usa pozione">🍵</button>
 
+<aside id="questPanel" class="quest hidden" aria-live="polite">
+  <div class="q-header">
+    <span>Quest</span>
+    <button id="btnQuestClose" class="q-close" aria-label="Chiudi">×</button>
+  </div>
+  <div id="questBody" class="q-body"></div>
+</aside>
+
 <div id="errBox" class="err" style="display:none"></div>
 
 <script>
-/* ===== Drakoria — BUILD D3-SAFE-HUD1-COMPAT ===== */
+/* ===== Drakoria — BUILD D3-COMPAT-XRQ1 ===== */
 (function(){
-  var BUILD='D3-SAFE-HUD1-COMPAT';
-  var SAVE_KEY='barebones_save_safehud_compat';
+  var BUILD='D3-COMPAT-XRQ1';
+  var SAVE_KEY='save_xrq1_compat';
+  var QUEST_KEY='quests_xrq1_compat';
+
   var cv=document.getElementById('game'); var ctx=cv.getContext('2d');
   var statusEl=document.getElementById('status');
   var btnAttack=document.getElementById('btnAttack'), btnUsePotion=document.getElementById('btnUsePotion');
   var btnSave=document.getElementById('btnSave'), btnLoad=document.getElementById('btnLoad'), btnReset=document.getElementById('btnReset');
+  var btnQuest=document.getElementById('btnQuest'), btnQuestClose=document.getElementById('btnQuestClose');
+  var questPanel=document.getElementById('questPanel'), questBody=document.getElementById('questBody');
   var errBox=document.getElementById('errBox');
   var atkCdCanvas=document.getElementById('atkCdCanvas'), atkCdCtx=atkCdCanvas.getContext('2d');
 
@@ -84,14 +115,71 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     for(var i0=0;i0<16;i0++){ var bx=(Math.random()*COLS|0), by=(Math.random()*ROWS|0); if((bx===1&&by===1)||(bx===COLS-2&&by===ROWS-2)){} else map[by][bx]=1; }
 
     // --- PLAYER / ENEMY / ITEMS
-    var player={x:1,y:1,hp:100,maxHp:100,coins:0,pots:1,atkMin:6,atkMax:12,lastAtk:0,atkCd:450};
-    var enemies=[{type:'melee',x:COLS-2,y:ROWS-2,hp:60,maxHp:60,lastHit:0,hitCd:800,atkMin:5,atkMax:9,mode:'patrol',tick:0}];
+    var player={x:1,y:1,hp:100,maxHp:100,coins:0,pots:1,atkMin:6,atkMax:12,lastAtk:0,atkCd:450,lvl:1,exp:0};
+    var enemies=[
+      {type:'melee',x:COLS-2,y:ROWS-2,hp:60,maxHp:60,lastHit:0,hitCd:800,atkMin:5,atkMax:9,mode:'patrol',tick:0,moveEvery:6},
+      {type:'ranged',x:COLS-4,y:2,hp:40,maxHp:40,atkCd:1200,lastShot:0,rangeMin:3,rangeMax:7,kiteEvery:2,moveTick:0,patrolEvery:10,pokeCd:700,lastPoke:0}
+    ];
     var coins=[], potions=[], projectiles=[];
-    for(var i1=0;i1<5;i1++) coins.push(randEmpty());
-    for(var i2=0;i2<1;i2++) potions.push(randEmpty());
+    for(var i1=0;i1<6;i1++) coins.push(randEmpty());
+    for(var i2=0;i2<2;i2++) potions.push(randEmpty());
 
     // --- HUD: floating damage texts
     var dmgTexts=[]; // {x,y,txt,color,ttl,vy}
+
+    // --- XP / LEVEL
+    var MAX_LVL=99;
+    function xpNeeded(l){ return Math.floor(50*Math.pow(l,1.5)); }
+    function gainXP(n){
+      if(player.lvl>=MAX_LVL) return;
+      player.exp+=n;
+      while(player.lvl<MAX_LVL && player.exp>=xpNeeded(player.lvl)){
+        player.exp-=xpNeeded(player.lvl);
+        levelUp();
+      }
+    }
+    function levelUp(){
+      player.lvl = Math.min(MAX_LVL, player.lvl+1);
+      player.maxHp += 10; player.hp = player.maxHp;
+      player.atkMin++; player.atkMax++;
+      player.atkCd = Math.max(200, player.atkCd-20);
+      flashScreen('#22c55e');
+    }
+
+    // --- QUEST (una semplice collect 10 coins)
+    var quests=[{id:'q1',title:'Raccogli 10 monete',desc:'Trova e raccogli 10 monete.',type:'collect',needed:10,progress:0,status:'active',reward:{xp:50,pots:1}}];
+    var currentQuest=0;
+    function renderQuest(){
+      var q=quests[currentQuest]; if(!q){ questBody.innerHTML='<div class="q-title">Nessuna quest</div>'; return; }
+      var ratio=q.needed?Math.floor(100*(q.progress/q.needed)):100, rw=q.reward||{}, dis=(q.status!=='completed');
+      questBody.innerHTML=
+        '<div class="q-title">'+q.title+'</div>'+
+        '<div class="q-desc">'+q.desc+'</div>'+
+        '<div class="q-row"><div class="progress"><div style="width:'+ratio+'%"></div></div><div style="margin-left:8px">'+q.progress+'/'+q.needed+'</div></div>'+
+        '<div class="q-reward">Ricompensa: '+(rw.xp?('+'+rw.xp+' XP '):'')+(rw.pots?('· +'+rw.pots+' pozione'): '')+'</div>'+
+        '<button id="btnClaim" class="q-claim" '+(dis?'disabled':'')+'>Riscatta</button>';
+      var btn=document.getElementById('btnClaim'); if(btn) btn.onclick=claimQuest;
+    }
+    function questAdd(kind,amt){
+      var q=quests[currentQuest]; if(!q||q.status!=='active') return;
+      if(q.type==='collect' && kind==='coin'){
+        q.progress = Math.min(q.needed, q.progress + (amt||1));
+      }
+      if(q.progress>=q.needed){ q.status='completed'; toast('Quest completata! Riscatta.'); }
+      renderQuest();
+    }
+    function claimQuest(){
+      var q=quests[currentQuest]; if(!q||q.status!=='completed') return;
+      var rw=q.reward||{};
+      if(rw.xp) gainXP(rw.xp);
+      if(rw.pots) player.pots += rw.pots;
+      q.status='claimed';
+      toast('Ricompensa ottenuta.');
+      renderQuest();
+    }
+    btnQuest.addEventListener('click', function(){ questPanel.classList.toggle('hidden'); }, false);
+    btnQuestClose.addEventListener('click', function(){ questPanel.classList.add('hidden'); }, false);
+    renderQuest();
 
     // --- UTILS
     function inside(x,y){ return x>=0&&y>=0&&x<COLS&&y<ROWS; }
@@ -117,7 +205,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       } return {x:2,y:2};
     }
 
-    // --- PATHFIND (BFS compat senza Map/Set)
+    // --- PATHFIND (BFS compat)
     function bfs(sx,sy,tx,ty){
       if(!walkable(tx,ty)) return null;
       var q=[{x:sx,y:sy}], head=0;
@@ -140,7 +228,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       return null;
     }
 
-    // --- INPUT (compat, no optional chaining, no passive options obj)
+    // --- INPUT
     var pathQueue=[], lastTapTs=0;
     function canvasToTile(ev){
       var r=cv.getBoundingClientRect();
@@ -159,16 +247,10 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       var m=canvasToTile(ev), now=performance.now(), cd=(now-player.lastAtk)>=player.atkCd;
       // click su nemico adiacente = attacco
       var i, adj=null;
-      for(i=0;i<enemies.length;i++){
-        var e=enemies[i];
-        if(chebyshev(player,e)===1 && inRect(m.sx,m.sy,enemyRect(e))){ adj=e; break; }
-      }
+      for(i=0;i<enemies.length;i++){ var e=enemies[i]; if(chebyshev(player,e)===1 && inRect(m.sx,m.sy,enemyRect(e))){ adj=e; break; } }
       if(adj && cd){ attackEnemy(adj); return; }
       if(cd){
-        for(i=0;i<enemies.length;i++){
-          var e2=enemies[i];
-          if(chebyshev(player,e2)===1 && e2.x===m.tx && e2.y===m.ty){ attackEnemy(e2); return; }
-        }
+        for(i=0;i<enemies.length;i++){ var e2=enemies[i]; if(chebyshev(player,e2)===1 && e2.x===m.tx && e2.y===m.ty){ attackEnemy(e2); return; } }
       }
       var p=bfs(player.x,player.y,m.tx,m.ty); if(p && p.length) pathQueue=p;
     }, false);
@@ -180,10 +262,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
     function tryAttackAdjacent(){
       var now=performance.now(); if(now-player.lastAtk<player.atkCd) return false;
-      for(var i=0;i<enemies.length;i++){
-        var en=enemies[i];
-        if(chebyshev(player,en)===1){ attackEnemy(en); return true; }
-      }
+      for(var i=0;i<enemies.length;i++){ var en=enemies[i]; if(chebyshev(player,en)===1){ attackEnemy(en); return true; } }
       return false;
     }
     btnAttack.addEventListener('click', tryAttackAdjacent, false);
@@ -202,15 +281,44 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       var now=performance.now(); player.lastAtk=now;
       var dmg=rndInt(player.atkMin,player.atkMax);
       t.hp=Math.max(0,t.hp-dmg); addDmgText(t.x,t.y,'-'+dmg,'#ffd166'); flashCircle(t.x,t.y,'#ff0000',0.25,26);
-      if(t.hp===0){ enemies.splice(enemies.indexOf(t),1); coins.push({x:t.x,y:t.y}); }
+      if(t.hp===0){
+        // drop
+        if(Math.random()<0.7) coins.push({x:t.x,y:t.y}); else potions.push({x:t.x,y:t.y});
+        // xp
+        gainXP(t.type==='ranged'?25:20);
+        // remove and respawn
+        enemies.splice(enemies.indexOf(t),1);
+        var s=randEmpty(); enemies.push( t.type==='ranged' ? spawnRangedAt(s.x,s.y) : spawnMeleeAt(s.x,s.y) );
+      }
       draw(); // feedback immediato
     }
 
+    function spawnMeleeAt(x,y){ return {type:'melee',x:x,y:y,hp:60,maxHp:60,lastHit:0,hitCd:800,atkMin:5,atkMax:9,mode:'patrol',tick:0,moveEvery:6}; }
+    function spawnRangedAt(x,y){ return {type:'ranged',x:x,y:y,hp:40,maxHp:40,atkCd:1200,lastShot:0,rangeMin:3,rangeMax:7,kiteEvery:2,moveTick:0,patrolEvery:10,pokeCd:700,lastPoke:0}; }
+
     function usePotion(){ if(player.pots<=0||player.hp>=player.maxHp) return; player.pots--; player.hp=Math.min(player.maxHp,player.hp+35); flashScreen('#8b5cf6'); draw(); }
-    function gameOver(){ alert('Sei stato sconfitto! Respawn al punto iniziale.'); player.hp=player.maxHp; player.x=1; player.y=1; }
+    function gameOver(){ alert('Sei stato sconfitto! Respawn al punto iniziale (niente perdita XP/livello).'); player.hp=player.maxHp; player.x=1; player.y=1; }
+
+    // --- Ranged helpers
+    function hasLoS(ax,ay,bx,by){
+      if(ax===bx){
+        var step=(ay<by)?1:-1; for(var y=ay+step; y!==by; y+=step){ if(map[y][ax]===1) return false; } return true;
+      }
+      if(ay===by){
+        var st=(ax<bx)?1:-1; for(var x=ax+st; x!==bx; x+=st){ if(map[ay][x]===1) return false; } return true;
+      }
+      return false;
+    }
 
     // --- SAVE/LOAD/RESET
-    btnSave.addEventListener('click', function(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify({map:map,player:player,enemies:enemies,coins:coins,potions:potions})); toast('Salvato.'); }catch(e){ panic('save',e); } }, false);
+    btnSave.addEventListener('click', function(){
+      try{
+        localStorage.setItem(SAVE_KEY, JSON.stringify({map:map,player:player,enemies:enemies,coins:coins,potions:potions,projectiles:projectiles}));
+        localStorage.setItem(QUEST_KEY, JSON.stringify({currentQuest:currentQuest,quests:quests}));
+        toast('Salvato.');
+      }catch(e){ panic('save',e); }
+    }, false);
+
     btnLoad.addEventListener('click', function(){ try{
       var raw=localStorage.getItem(SAVE_KEY); if(!raw) return alert('Nessun salvataggio.');
       var d=JSON.parse(raw), i,y,x;
@@ -219,34 +327,101 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       enemies.length=0; if(d && d.enemies){ for(i=0;i<d.enemies.length;i++) enemies.push(d.enemies[i]); }
       coins.length=0; if(d && d.coins){ for(i=0;i<d.coins.length;i++) coins.push(d.coins[i]); }
       potions.length=0; if(d && d.potions){ for(i=0;i<d.potions.length;i++) potions.push(d.potions[i]); }
+      projectiles.length=0; if(d && d.projectiles){ for(i=0;i<d.projectiles.length;i++) projectiles.push(d.projectiles[i]); }
+      var qd = localStorage.getItem(QUEST_KEY); if(qd){ var qj=JSON.parse(qd); if(qj){ currentQuest=qj.currentQuest||0; if(qj.quests&&qj.quests.length){ quests[0].progress=qj.quests[0].progress||0; quests[0].status=qj.quests[0].status||'active'; } } }
+      renderQuest();
       toast('Caricato.'); draw();
     }catch(e){ panic('load',e); } }, false);
+
     btnReset.addEventListener('click', function(){ location.reload(); }, false);
 
     // --- LOOP
     function step(){
       try{
-        // path
+        // path (player)
         if(pathQueue.length){
           var next=pathQueue.shift();
           var blocked=false, i;
           if(!walkable(next.x,next.y)) blocked=true;
           for(i=0;i<enemies.length;i++){ if(enemies[i].x===next.x&&enemies[i].y===next.y){ blocked=true; break; } }
-        if(!blocked){ player.x=next.x; player.y=next.y; } else pathQueue=[];
+          if(!blocked){ player.x=next.x; player.y=next.y; } else pathQueue=[];
         }
-        // nemico infligge danno se adiacente
-        var now=performance.now();
+
+        // ENEMY AI
         for(var j=0;j<enemies.length;j++){
           var e=enemies[j];
-          var near = (Math.abs(e.x-player.x)+Math.abs(e.y-player.y))<=1;
-          if(near && (now-e.lastHit)>=e.hitCd){
-            e.lastHit=now; var dmg=rndInt(e.atkMin,e.atkMax);
-            player.hp=Math.max(0,player.hp-dmg); addDmgText(player.x,player.y,'-'+dmg,'#ff6b6b'); flashCircle(player.x,player.y,'#ff0000',0.25,26);
-            if(player.hp===0) gameOver();
+          if(e.type==='melee'){
+            // semplice inseguimento a scatti
+            e.tick=(e.tick+1)%e.moveEvery;
+            if(e.tick===0){
+              var dx = player.x>e.x?1:(player.x<e.x?-1:0);
+              var dy = player.y>e.y?1:(player.y<e.y?-1:0);
+              var opts=[{x:e.x+dx,y:e.y},{x:e.x,y:e.y+dy},{x:e.x,y:e.y}];
+              for(var oi=0;oi<opts.length;oi++){
+                var mv=opts[oi]; if(walkable(mv.x,mv.y) && !(mv.x===player.x&&mv.y===player.y)){ e.x=mv.x; e.y=mv.y; break; }
+              }
+            }
+            // colpo se adiacente
+            var near = (Math.abs(e.x-player.x)+Math.abs(e.y-player.y))<=1;
+            var now=performance.now();
+            if(near && (now-e.lastHit)>=e.hitCd){
+              e.lastHit=now; var dmg=rndInt(e.atkMin,e.atkMax);
+              player.hp=Math.max(0,player.hp-dmg); addDmgText(player.x,player.y,'-'+dmg,'#ff6b6b'); flashCircle(player.x,player.y,'#ff0000',0.25,26);
+              if(player.hp===0) gameOver();
+            }
+          } else { // ranged
+            var dist=manhattan(e,player);
+            var adj = (Math.max(Math.abs(e.x-player.x),Math.abs(e.y-player.y))===1);
+            var now2=performance.now();
+            if(adj){
+              if(now2-e.lastPoke>=e.pokeCd){
+                e.lastPoke=now2; var dmg2=rndInt(4,7);
+                player.hp=Math.max(0,player.hp-dmg2); addDmgText(player.x,player.y,'-'+dmg2,'#ff6b6b'); flashCircle(player.x,player.y,'#ff0000',0.25,26);
+                if(player.hp===0) gameOver();
+              }
+            } else {
+              var inRange = (dist>=e.rangeMin && dist<=e.rangeMax && hasLoS(e.x,e.y,player.x,player.y));
+              if(inRange){
+                if(now2-e.lastShot>=e.atkCd){
+                  e.lastShot=now2;
+                  var dx=0,dy=0;
+                  if(e.x===player.x) dy=player.y>e.y?1:-1; else if(e.y===player.y) dx=player.x>e.x?1:-1;
+                  if(dx||dy) projectiles.push({x:e.x,y:e.y,dx:dx,dy:dy,spdTick:0,dmg:rndInt(6,10)});
+                }
+                // kiting se troppo vicino
+                if(dist<e.rangeMin){
+                  var backX=e.x + (player.x<e.x?1:(player.x>e.x?-1:0));
+                  var backY=e.y + (player.y<e.y?1:(player.y>e.y?-1:0));
+                  if(walkable(backX,backY) && !(backX===player.x&&backY===player.y)){ e.x=backX; e.y=backY; }
+                }
+              } else {
+                // piccolo avvicinamento verso asse
+                if(now2%2===0){
+                  var stepX = player.x>e.x?1:(player.x<e.x?-1:0);
+                  var stepY = player.y>e.y?1:(player.y<e.y?-1:0);
+                  var cand = Math.random()<0.5 ? {x:e.x+stepX,y:e.y} : {x:e.x,y:e.y+stepY};
+                  if(walkable(cand.x,cand.y) && !(cand.x===player.x&&cand.y===player.y)){ e.x=cand.x; e.y=cand.y; }
+                }
+              }
+            }
           }
         }
-        // pick up
-        for(var c=coins.length-1;c>=0;c--) if(coins[c].x===player.x && coins[c].y===player.y){ coins.splice(c,1); player.coins++; }
+
+        // PROIETTILI
+        for(var pi=projectiles.length-1; pi>=0; pi--){
+          var pr=projectiles[pi];
+          pr.spdTick=(pr.spdTick+1)%2; if(pr.spdTick!==0) continue;
+          var nx=pr.x+pr.dx, ny=pr.y+pr.dy;
+          if(!inside(nx,ny) || map[ny][nx]===1){ projectiles.splice(pi,1); continue; }
+          if(nx===player.x && ny===player.y){
+            var dmgp=pr.dmg; player.hp=Math.max(0,player.hp-dmgp); addDmgText(player.x,player.y,'-'+dmgp,'#ff6b6b'); flashCircle(player.x,player.y,'#ff0000',0.25,26);
+            projectiles.splice(pi,1); if(player.hp===0) gameOver(); continue;
+          }
+          pr.x=nx; pr.y=ny;
+        }
+
+        // PICKUP
+        for(var c=coins.length-1;c>=0;c--) if(coins[c].x===player.x && coins[c].y===player.y){ coins.splice(c,1); player.coins++; questAdd('coin',1); gainXP(2); }
         for(var p=potions.length-1;p>=0;p--) if(potions[p].x===player.x && potions[p].y===player.y){ potions.splice(p,1); player.pots++; }
 
         updateDmgTexts();
@@ -276,16 +451,22 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
         ctx.fillStyle='#6d28d9'; ctx.fillRect(px+TILE/2-6,py+TILE/2-24,12,4);
         ctx.fillStyle='#0006'; ctx.beginPath(); ctx.ellipse(px+TILE/2,py+TILE-12,12,4,0,0,Math.PI*2); ctx.fill();
       }
-      // enemy
-      for(var eI=0;eI<enemies.length;eI++){ var en=enemies[eI]; drawActor(en.x,en.y,getVar('--enemy')); drawHpBar(en.x,en.y,en.hp,en.maxHp,true); }
+      // enemies
+      for(var eI=0;eI<enemies.length;eI++){ var en=enemies[eI]; drawActor(en.x,en.y, en.type==='ranged' ? '#a855f7' : getVar('--enemy')); drawHpBar(en.x,en.y,en.hp,en.maxHp,true); }
       // player
       drawActor(player.x,player.y,getVar('--player')); drawHpBar(player.x,player.y,player.hp,player.maxHp,false);
+
+      // projectiles
+      for(var pp=0; pp<projectiles.length; pp++){ var pr=projectiles[pp]; var px2=pr.x*TILE+TILE/2, py2=pr.y*TILE+TILE/2; ctx.fillStyle='#f87171'; ctx.beginPath(); ctx.arc(px2,py2,6,0,Math.PI*2); ctx.fill(); }
 
       // floating damage
       drawDmgTexts();
 
+      // XP bar (top)
+      drawXpBar();
+
       // status + build
-      statusEl.textContent = 'build: '+BUILD+' | HP '+player.hp+'/'+player.maxHp+' | coins '+player.coins+' | pots '+player.pots;
+      statusEl.textContent = 'build: '+BUILD+' | LV '+player.lvl+' | HP '+player.hp+'/'+player.maxHp+' | coins '+player.coins+' | pots '+player.pots;
       ctx.fillStyle='#ffffffcc'; ctx.font='bold 14px system-ui'; ctx.fillText('BUILD '+BUILD, 8, 24);
     }
 
@@ -301,6 +482,14 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       ctx.fillStyle=getVar('--hpBack'); ctx.fillRect(px,py,w,h);
       ctx.fillStyle=col; ctx.fillRect(px,py,w*r,h);
       ctx.strokeStyle='#0008'; ctx.strokeRect(px,py,w,h);
+    }
+    function drawXpBar(){
+      var pad=6, h=10, x=pad, y=pad, w=cv.width-pad*2, need=(player.lvl<MAX_LVL?xpNeeded(player.lvl):1), ratio=(player.lvl<MAX_LVL?Math.max(0,Math.min(1,player.exp/need)):1);
+      ctx.fillStyle='rgba(11,18,36,.66)'; ctx.fillRect(x,y,w,h);
+      ctx.fillStyle='#7c3aed'; ctx.fillRect(x,y,w*ratio,h);
+      ctx.strokeStyle='#1f2a44'; ctx.strokeRect(x,y,w,h);
+      ctx.fillStyle='#e5e7eb'; ctx.font='12px system-ui'; ctx.textAlign='left'; ctx.textBaseline='top';
+      ctx.fillText('LV '+player.lvl+(player.lvl<MAX_LVL?(' — '+Math.floor(ratio*100)+'%'):' — MAX'), x, y+h+2);
     }
     function flashScreen(color){ ctx.save(); ctx.globalAlpha=.20; ctx.fillStyle=color; ctx.fillRect(0,0,cv.width,cv.height); ctx.restore(); }
     function flashCircle(tx,ty,color,alpha,r){ var x=tx*TILE+TILE/2,y=ty*TILE+TILE/2; ctx.save(); ctx.globalAlpha=alpha; ctx.fillStyle=color; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); ctx.restore(); }
