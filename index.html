@@ -331,6 +331,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   try{
     // ===== Dati runtime =====
     var lootBags=[]; var nextItemId=1;
+    var teleportGuardUntil = 0; // protezione anti-teletrasporto immediato
 
     // Inventario & equip
     var inventory=[]; // {id,name,icon,rarity,type,qty?, slot?}
@@ -398,6 +399,30 @@ var WORLD = {
 };
 
 // ricostruisce la mappa e (se serve) svuota/spawna elementi
+function isPortalTile(worldName, x, y){
+  var list = (WORLD.portals && WORLD.portals[worldName]) || [];
+  for (var i=0;i<list.length;i++){ var p=list[i]; if(p.x===x && p.y===y) return true; }
+  return false;
+}
+
+// Trova una casella vicina al portale di destinazione che sia valida, libera e NON portale
+function findSafeExit(worldName, px, py){
+  var candidates = [
+    [ 1, 0],[-1, 0],[ 0, 1],[ 0,-1],   // ortogonali
+    [ 1, 1],[-1, 1],[ 1,-1],[-1,-1],   // diagonali
+    [ 2, 0],[-2, 0],[ 0, 2],[ 0,-2]    // fallback
+  ];
+  for (var i=0;i<candidates.length;i++){
+    var nx = px + candidates[i][0], ny = py + candidates[i][1];
+    if(!inside(nx,ny)) continue;
+    if(!walkable(nx,ny)) continue;
+    if(isPortalTile(worldName, nx, ny)) continue;
+    if(!tileFree(nx,ny)) continue;
+    return {x:nx, y:ny};
+  }
+  // Estrema ratio: rimani sul portale (verrà bloccato dal guard timer)
+  return {x:px, y:py};
+}
 function buildMap(name){
   WORLD.current = name;
 
@@ -420,12 +445,14 @@ function buildMap(name){
   }
   // (Se vuoi ostacoli casuali SOLO in main)
   if(name==='main'){
-    for(var i=0;i<16;i++){
-      var bx=(Math.random()*COLS|0), by=(Math.random()*ROWS|0);
-      if((bx===1&&by===4)||(bx===COLS-2&&by===ROWS-2)) continue; // evita spawn/player
-      map[by][bx] = 1;
-    }
+  for(var i=0;i<16;i++){
+    var bx=(Math.random()*COLS|0), by=(Math.random()*ROWS|0);
+    // evita spawn/player e PORTALI
+    if((bx===1&&by===4)||(bx===COLS-2&&by===ROWS-2)) continue;
+    if(isPortalTile('main', bx, by)) continue; // <-- NUOVO
+    map[by][bx] = 1;
   }
+}
 
   // 3) popolazione nemici: NESSUN nemico nello spawn
   enemies.length = name==='spawn' ? 0 : enemies.length;
@@ -455,16 +482,25 @@ function drawPortals(ctx, tileSize){
 
 // se il player entra nel portale → teletrasporto
 function checkPortalAndTeleport(){
+  var now = performance.now();
+  if (now < teleportGuardUntil) return; // evita retrigger immediato
+
   var px = player.x, py = player.y;
   var list = WORLD.portals[WORLD.current] || [];
   var hit = null;
   for(var i=0;i<list.length;i++){ var p=list[i]; if(p.x===px && p.y===py){ hit=p; break; } }
   if(!hit) return;
 
+  // Cambia mappa
   buildMap(hit.to);
-  player.x = hit.tx; player.y = hit.ty;
-  // Interrompi eventuale path in corso
-  if(Array.isArray(pathQueue)) pathQueue.length = 0;
+
+  // Esci su una casella adiacente sicura (non sul portale)
+  var exit = findSafeExit(hit.to, hit.tx, hit.ty);
+  player.x = exit.x; player.y = exit.y;
+
+  // Ferma eventuale path in corso e proteggi per ~0.45s
+  if (Array.isArray(pathQueue)) pathQueue.length = 0;
+  teleportGuardUntil = performance.now() + 450;
 
   logSys('Teletrasporto: ' + (WORLD.current==='spawn'?'Spawn':'Main'));
   draw(); drawMini();
