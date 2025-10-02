@@ -630,7 +630,6 @@ function rndInt(a,b){ return a+((Math.random()*(b-a+1))|0); }
 function getVar(n){ var cs = window.getComputedStyle(document.documentElement); return cs.getPropertyValue(n).trim(); }
 function rollCrit(chance){ return Math.random() < (chance||0); }
 
-function manhattan(a,b){ return Math.abs(a.x-b.x)+Math.abs(a.y-b.y); }
 
 function tileFree(x,y){
   if(map[y][x]!==0) return false;
@@ -835,218 +834,148 @@ function tileFree(x,y){
       return false;
     }
 
-    // ===== LOOT & ITEMS =====
-    var BAG_TTL_MS = 90000, BAG_WARN_MS = 10000;
+    <!-- SOSTITUISCI QUESTO BLOCCO -->
+<script>
+// ===== LOOT & ITEMS =====
+var BAG_TTL_MS = 90000, BAG_WARN_MS = 10000;
 
-    function trySpawnLootBag(x,y,kind){
-      var items=[];
-      if(Math.random()<0.85) items.push(makeItem('Monete', '🪙', 'common', 'coin', rndInt(1,3)));
-      if(Math.random()<0.35) items.push(makeItem('Pozione', '🍵', 'common', 'potion', 1, {heal:35}));
-      if(kind==='slime' || kind==='melee'){
-        if(Math.random()<0.28) items.push(makeItem('Gelatina', '🟢', 'uncommon', 'material', 1));
-        if(Math.random()<0.18) items.push(makeWeapon('Pugnale Rozzo','🗡️','uncommon',2));
-        if(Math.random()<0.10) items.push(makeArmor('Fascia di Stoffa','🛡️','uncommon',8));
-        if(Math.random()<0.05) items.push(makeWeapon('Lama Viscosa','💚','rare',4));
-      } else {
-        if(Math.random()<0.22) items.push(makeWeapon('Arco Leggero','🏹','uncommon',3));
-        if(Math.random()<0.14) items.push(makeArmor('Cappuccio di Cuoio','🧢','uncommon',12));
-        if(Math.random()<0.08) items.push(makeWeapon('Arco del Falco','🦅','rare',5));
-        if(Math.random()<0.04) items.push(makeArmor('Mantello del Cacciatore','🧥','rare',20));
-      }
-      if(Math.random()<0.01) items.push(makeWeapon('Lama Leggendaria','⚡','legend',9));
+function trySpawnLootBag(x,y,kind){
+  var items=[];
+  if(Math.random()<0.85) items.push(makeItem('Monete','🪙','common','coin', rndInt(1,3)));
+  if(Math.random()<0.35) items.push(makeItem('Pozione','🍵','common','potion',1,{heal:35}));
 
-      if(items.length===0) return;
-      lootBags.push({x:x,y:y,items:items, createdAt:performance.now(), ttlMs:BAG_TTL_MS});
-    }
-    function makeItem(name, icon, rarity, type, qty, extra){
-      var o={id: nextItemId++, name, icon, rarity, type, qty:qty||1};
-      if(extra && typeof extra==='object'){ for(var k in extra) o[k]=extra[k]; }
-      return o;
-    }
-    function makeWeapon(name, icon, rarity, atkBonus){ return {id: nextItemId++, name, icon, rarity, type:'weapon', slot:'weapon', atkBonus: atkBonus||0}; }
-    function makeArmor(name, icon, rarity, hpBonus){ return {id: nextItemId++, name, icon, rarity, type:'armor', slot:'armor', hpBonus: hpBonus||0}; }
-    btnLoot.style.display='block'; // mostra solo il pulsante, niente finestra
+  if(kind==='slime' || kind==='melee'){
+    if(Math.random()<0.28) items.push(makeItem('Gelatina','🟢','uncommon','material',1));
+    if(Math.random()<0.18) items.push(makeWeapon('Pugnale Rozzo','🗡️','uncommon',2));
+    if(Math.random()<0.10) items.push(makeArmor ('Fascia di Stoffa','🛡️','uncommon',8));
+    if(Math.random()<0.05) items.push(makeWeapon('Lama Viscosa','💚','rare',4));
+  } else {
+    if(Math.random()<0.22) items.push(makeWeapon('Arco Leggero','🏹','uncommon',3));
+    if(Math.random()<0.14) items.push(makeArmor ('Cappuccio di Cuoio','🧢','uncommon',12));
+    if(Math.random()<0.08) items.push(makeWeapon('Arco del Falco','🦅','rare',5));
+    if(Math.random()<0.04) items.push(makeArmor ('Mantello del Cacciatore','🧥','rare',20));
+  }
+  if(Math.random()<0.01) items.push(makeWeapon('Lama Leggendaria','⚡','legend',9));
+  if(items.length===0) return;
+
+  lootBags.push({ x, y, items, createdAt:performance.now(), ttlMs:BAG_TTL_MS });
+}
+
+function makeItem(name,icon,rarity,type,qty,extra){
+  var o={ id:nextItemId++, name, icon, rarity, type, qty:qty||1 };
+  if(extra&&typeof extra==='object'){ for(var k in extra) o[k]=extra[k]; }
+  return o;
+}
+function makeWeapon(name,icon,rarity,atkBonus){ return { id:nextItemId++, name, icon, rarity, type:'weapon', slot:'weapon', atkBonus:atkBonus||0 }; }
+function makeArmor (name,icon,rarity,hpBonus){  return { id:nextItemId++, name, icon, rarity, type:'armor',  slot:'armor',  hpBonus: hpBonus||0 }; }
+
+function getBagAt(x,y){ for(var i=0;i<lootBags.length;i++){ var b=lootBags[i]; if(b.x===x&&b.y===y) return b; } return null; }
+
+function renderLoot(bag){
+  lootBody.innerHTML='';
+  var items=bag.items;
+  for(var i=0;i<items.length;i++){
+    (function(it){
+      var d=document.createElement('div');
+      d.className='itm '+rarityClass(it.rarity);
+      d.innerHTML='<span class="lbl">'+(it.qty?('x'+it.qty):'')+'</span><div class="ico">'+it.icon+
+                  '</div><div class="nm">'+it.name+'</div>';
+      d.addEventListener('click', function(){ takeItem(bag,it.id); }, false);
+      lootBody.appendChild(d);
+    })(items[i]);
+  }
+  lootTakeAll.disabled = items.length===0;
+  if(items.length===0) lootBody.innerHTML='<div style="grid-column:1/-1;text-align:center;color:#9aa3b2">Vuoto</div>';
+}
+function rarityClass(r){ if(r==='legend')return'r-legend'; if(r==='rare')return'r-rare'; if(r==='uncommon')return'r-uncommon'; return'r-com'; }
+
+function takeItem(bag,itemId){
+  for(var i=0;i<bag.items.length;i++){
+    if(bag.items[i].id===itemId){ var it=bag.items[i]; applyItem(it); bag.items.splice(i,1); break; }
+  }
+  if(bag.items.length===0){
+    lootBags.splice(lootBags.indexOf(bag),1);
+    lootWin.classList.add('hidden');
+    btnLoot.style.display='none';
+  }else{
+    renderLoot(bag);
+  }
+  draw(); drawMini(); updateHotbarCounts();
+}
+
+// Bottone “👜”
+btnLoot.addEventListener('click', function(){
+  var bag=getBagAt(player.x,player.y);
+  if(!bag){ btnLoot.style.display='none'; return; }
+
+  var key = bagKey(bag);
+  // se l’utente ha appena chiuso, non riapri in auto
+  if(lootSuppress.id===key && performance.now()<lootSuppress.until){
+    btnLoot.style.display='block';
     return;
   }
 
-  btnLoot.style.display='block';
-
-  // auto-raccolta solo monete/pozioni
-  var commonOnly = true;
-  for (var i = 0; i < bag.items.length; i++) {
-    var t = bag.items[i].type;
-    if (t !== 'coin' && t !== 'potion') { commonOnly = false; break; }
+  // se contiene solo comuni → auto-raccolta
+  var commonOnly=true;
+  for(var i=0;i<bag.items.length;i++){
+    var t=bag.items[i].type;
+    if(t!=='coin' && t!=='potion'){ commonOnly=false; break; }
   }
+  if(commonOnly){
+    var beforeCoins=player.coins, beforePots=player.pots;
+    var emptied=autoPickupCommons(bag);
+    var coinsGained=player.coins-beforeCoins, potsGained=player.pots-beforePots;
 
-  if (commonOnly) {
-    var beforeCoins = player.coins, beforePots = player.pots;
-    var emptied = autoPickupCommons(bag);
-    var coinsGained = player.coins - beforeCoins;
-    var potsGained  = player.pots  - beforePots;
+    if(emptied){ lootBags.splice(lootBags.indexOf(bag),1); btnLoot.style.display='none'; }
+    else{ renderLoot(bag); lootWin.classList.remove('hidden'); }
 
-    if (emptied) {
-      lootBags.splice(lootBags.indexOf(bag),1);
-      btnLoot.style.display='none';
-    } else {
-      renderLoot(bag);
-      lootWin.classList.remove('hidden');
-    }
     updateHotbarCounts(); draw(); drawMini();
-
-    if (coinsGained || potsGained) {
-      toast('Raccolto: ' + (coinsGained?('🪙 x'+coinsGained+' '):'') + (potsGained?('🍵 x'+potsGained):''));
-      if(coinsGained) logLoot('Monete +' + coinsGained);
-      if(potsGained)  logLoot('Pozioni +' + potsGained);
+    if(coinsGained||potsGained){
+      toast('Raccolto: '+(coinsGained?('🪙 x'+coinsGained+' '):'')+(potsGained?('🍵 x'+potsGained):''));
+      if(coinsGained) logLoot('Monete +'+coinsGained);
+      if(potsGained)  logLoot('Pozioni +'+potsGained);
     }
     return;
   }
 
-  // altrimenti apri la finestra
+  // altrimenti apri finestra
   renderLoot(bag);
   lootWin.classList.remove('hidden');
-}
-      btnLoot.style.display='block';
+}, false);
 
-      var commonOnly = true;
-      for (var i = 0; i < bag.items.length; i++) { var t = bag.items[i].type; if (t !== 'coin' && t !== 'potion') { commonOnly = false; break; } }
-      if (commonOnly) {
-        var beforeCoins = player.coins, beforePots = player.pots;
-        var emptied = autoPickupCommons(bag);
-        var coinsGained = player.coins - beforeCoins;
-        var potsGained  = player.pots  - beforePots;
-        if (emptied) { lootBags.splice(lootBags.indexOf(bag),1); btnLoot.style.display='none'; }
-        else { renderLoot(bag); lootWin.classList.remove('hidden'); }
-        updateHotbarCounts(); draw(); drawMini();
-        if (coinsGained || potsGained) { toast('Raccolto: ' + (coinsGained?('🪙 x'+coinsGained+' '):'') + (potsGained?('🍵 x'+potsGained):'')); if(coinsGained) logLoot('Monete +' + coinsGained); if(potsGained) logLoot('Pozioni +' + potsGained); }
-        return;
-      }
-      renderLoot(bag); lootWin.classList.remove('hidden');
-    }
-    function getBagAt(x,y){ for(var i=0;i<lootBags.length;i++){ if(lootBags[i].x===x && lootBags[i].y===y) return lootBags[i]; } return null; }
-    function renderLoot(bag){
-      lootBody.innerHTML='';
-      var items = bag.items;
-      for(var i=0;i<items.length;i++){
-        (function(it){
-          var d=document.createElement('div'); d.className='itm '+rarityClass(it.rarity);
-          d.innerHTML='<span class="lbl">'+ (it.qty?('x'+it.qty):'') +'</span><div class="ico">'+it.icon+'</div><div class="nm">'+it.name+'</div>';
-          d.addEventListener('click', function(){ takeItem(bag, it.id); }, false);
-          lootBody.appendChild(d);
-        })(items[i]);
-      }
-      lootTakeAll.disabled = items.length===0;
-      if(items.length===0){ lootBody.innerHTML='<div style="grid-column:1/-1;text-align:center;color:#9aa3b2">Vuoto</div>'; }
-    }
-    function rarityClass(r){ if(r==='legend') return 'r-legend'; if(r==='rare') return 'r-rare'; if(r==='uncommon') return 'r-uncommon'; return 'r-com'; }
-    function takeItem(bag, itemId){
-      for(var i=0;i<bag.items.length;i++){
-        if(bag.items[i].id===itemId){ var it=bag.items[i]; applyItem(it); bag.items.splice(i,1); break; }
-      }
-      if(bag.items.length===0){
-        lootBags.splice(lootBags.indexOf(bag),1);
-        lootWin.classList.add('hidden');
-        btnLoot.style.display='none';
-      } else { renderLoot(bag); }
-      draw(); drawMini(); updateHotbarCounts();
-    }
-
-    btnLoot.addEventListener('click', function(){
-      var bag = getBagAt(player.x, player.y);
-      if(!bag){ btnLoot.style.display='none'; return; }
-      renderLoot(bag);
-      lootWin.classList.remove('hidden');
-    }, false);
-
-    function autoPickupCommons(bag){
-      var keep=[], coinsGained=0, potsGained=0;
-      for(var i=0;i<bag.items.length;i++){
-        var it=bag.items[i];
-        if(it.type==='coin'){ coinsGained += it.qty; continue; }
-        if(it.type==='potion'){ potsGained += it.qty; continue; }
-        keep.push(it);
-      }
-      if(coinsGained>0){ player.coins += coinsGained; questAdd('coin', coinsGained); }
-      if(potsGained>0){ player.pots += potsGained; updateHotbarCounts(); }
-      bag.items = keep;
-      return bag.items.length===0;
-    }
- lootClose.addEventListener('click', function(){
-  var bag = getBagAt(player.x, player.y);
-  if (bag) { lootSuppress = { id: bagKey(bag), until: performance.now() + 2000 }; }
+lootClose.addEventListener('click', function(){
+  var bag=getBagAt(player.x,player.y);
+  if(bag){ lootSuppress={ id:bagKey(bag), until:performance.now()+2000 }; }
   lootWin.classList.add('hidden');
 }, false);
 
 lootTakeAll.addEventListener('click', function(){
-  var bag = getBagAt(player.x, player.y);
-  if (!bag) return;
-
-  while (bag.items.length) applyItem(bag.items.shift());
-  lootBags.splice(lootBags.indexOf(bag), 1);
-
-  lootWin.classList.add('hidden');
-  btnLoot.style.display='none';
-  updateHotbarCounts();
-  draw(); drawMini();
-}, false);
-
-  // prendi ogni item
-  while (bag.items.length){
-    applyItem(bag.items[0]);
-    bag.items.shift();
-  }
+  var bag=getBagAt(player.x,player.y);
+  if(!bag) return;
+  while(bag.items.length) applyItem(bag.items.shift());
   lootBags.splice(lootBags.indexOf(bag),1);
   lootWin.classList.add('hidden');
   btnLoot.style.display='none';
-
-  updateHotbarCounts();
-  draw(); drawMini();
+  updateHotbarCounts(); draw(); drawMini();
 }, false);
 
-  // rimuovi il sacco e chiudi
-  lootBags.splice(lootBags.indexOf(bag), 1);
-  lootWin.classList.add('hidden');
-  btnLoot.style.display='none';
-
-  updateHotbarCounts();
-  draw(); drawMini(); renderInventoryIfOpen();
-}, false);
-
-  var key = bagKey(bag);
-  if (lootSuppress.id === key && performance.now() < lootSuppress.until) {
-    btnLoot.style.display='block'; // mostra solo il pulsante, niente auto-popup
-    return;
+function autoPickupCommons(bag){
+  var keep=[], coinsGained=0, potsGained=0;
+  for(var i=0;i<bag.items.length;i++){
+    var it=bag.items[i];
+    if(it.type==='coin'){ coinsGained+=it.qty; continue; }
+    if(it.type==='potion'){ potsGained+=it.qty; continue; }
+    keep.push(it);
   }
-
-  btnLoot.style.display='block';
-
-  var commonOnly = true;
-  for (var i = 0; i < bag.items.length; i++) {
-    var t = bag.items[i].type;
-    if (t !== 'coin' && t !== 'potion') { commonOnly = false; break; }
-  }
-
-  if (commonOnly) {
-    var beforeCoins = player.coins, beforePots = player.pots;
-    var emptied = autoPickupCommons(bag);
-    var coinsGained = player.coins - beforeCoins;
-    var potsGained  = player.pots  - beforePots;
-    if (emptied) { lootBags.splice(lootBags.indexOf(bag),1); btnLoot.style.display='none'; }
-    else { renderLoot(bag); lootWin.classList.remove('hidden'); }
-    updateHotbarCounts(); draw(); drawMini();
-    if (coinsGained || potsGained) {
-      toast('Raccolto: ' + (coinsGained?('🪙 x'+coinsGained+' '):'') + (potsGained?('🍵 x'+potsGained):''));
-      if(coinsGained) logLoot('Monete +' + coinsGained);
-      if(potsGained)  logLoot('Pozioni +' + potsGained);
-    }
-    return;
-  }
-
-  renderLoot(bag); lootWin.classList.remove('hidden');
+  if(coinsGained>0){ player.coins+=coinsGained; questAdd('coin',coinsGained); }
+  if(potsGained>0){ player.pots+=potsGained; updateHotbarCounts(); }
+  bag.items=keep;
+  return bag.items.length===0;
 }
+</script>
+<!-- FINE SOSTITUZIONE -->
 
-    // INVENTARIO UI
-    function applyItem(it){
-      if(it.type==='coin'){ player.coins += it.qty; questAdd('coin', it.qty); logLoot('Monete +' + it.qty); }
+    // INVENTARIr.coins += it.qty; questAdd('coin', it.qty); logLoot('Monete +' + it.qty); }
       else if(it.type==='potion'){ player.pots += it.qty; logLoot('Pozioni +' + it.qty); }
       else { inventoryStackOrPush(it); renderInventoryIfOpen(); toast('Ottenuto: '+it.name+(it.qty?(' x'+it.qty):'')); logLoot('Ottenuto: '+it.name); }
     }
@@ -1281,192 +1210,160 @@ if (d && d.world) {
     function isAdjacent(ax,ay,bx,by){ return Math.abs(ax-bx)<=1 && Math.abs(ay-by)<=1; }
 
     function step(){
-      try{
-        if(isCasting && currentCasting){
-          var now=performance.now();
-          var elapsed=now-castStart, need=currentCasting.ab.castMs;
-          var ratio=Math.max(0,Math.min(1,elapsed/need));
-          castBar.style.width=(ratio*100)+'%';
-          castTime.textContent=((need-elapsed)/1000).toFixed(1)+'s';
-          if(elapsed>=need) finishCast();
-        }
+  try{
+    // === Cast bar ===
+    if(isCasting && currentCasting){
+      var now=performance.now();
+      var elapsed=now-castStart, need=currentCasting.ab.castMs;
+      var ratio=Math.max(0,Math.min(1,elapsed/need));
+      castBar.style.width=(ratio*100)+'%';
+      castTime.textContent=((need-elapsed)/1000).toFixed(1)+'s';
+      if(elapsed>=need) finishCast();
+    }
 
-        if(autoChase && target && !isCasting){
-          var stillThere=enemies.indexOf(target)!==-1;
-          if(!stillThere){ autoChase=false; target=null; hideTargetFrame(); }
-          if(target && chebyshev(player,target)!==1 && pathQueue.length===0){
-            var pAdj=bfsToAdjacencySmart(player.x,player.y,target.x,target.y,target.type);
-            if(pAdj && pAdj.length) pathQueue=pAdj;
-          }
-          if(target && chebyshev(player,target)===1){
-            var nowA=performance.now(); if(nowA-player.lastAtk>=player.atkCd) attackEnemy(target);
-          }
-        }
+    // === Auto-chase + auto-attack ===
+    if(autoChase && target && !isCasting){
+      var stillThere=enemies.indexOf(target)!==-1;
+      if(!stillThere){ autoChase=false; target=null; hideTargetFrame(); }
+      if(target && chebyshev(player,target)!==1 && pathQueue.length===0){
+        var pAdj=bfsToAdjacencySmart(player.x,player.y,target.x,target.y,target.type);
+        if(pAdj && pAdj.length) pathQueue=pAdj;
+      }
+      if(target && chebyshev(player,target)===1){
+        var nowA=performance.now(); if(nowA-player.lastAtk>=player.atkCd) attackEnemy(target);
+      }
+    }
 
-        if(pathQueue.length && !isCasting){
-          var next=pathQueue.shift();
-          var blocked=false, i;
-          if(!walkable(next.x,next.y)) blocked=true;
-          for(i=0;i<enemies.length;i++){ if(enemies[i].x===next.x&&enemies[i].y===next.y){ blocked=true; break; } }
-          if(!blocked){ player.x=next.x; player.y=next.y; } else pathQueue=[];
-        }
-checkPortalAndTeleport();
-        // Enemy AI
-        var now=performance.now();
-        for(var j=0;j<enemies.length;j++){
-          var e=enemies[j];
-          var distC=chebyshev(e, player);
-          if(!e.aggro && distC<=e.aggroRange){ e.aggro=true; e.lastSeenTs=now; }
+    // === Movimento su path ===
+    if(pathQueue.length && !isCasting){
+      var next=pathQueue.shift();
+      var blocked=false, i;
+      if(!walkable(next.x,next.y)) blocked=true;
+      for(i=0;i<enemies.length;i++){ if(enemies[i].x===next.x&&enemies[i].y===next.y){ blocked=true; break; } }
+      if(!blocked){ player.x=next.x; player.y=next.y; } else pathQueue=[];
+    }
 
-          var tooFar = chebyshev({x:e.spawnX,y:e.spawnY}, player) > e.leashRange || distC > e.leashRange;
-          if(e.aggro){
-            if(hasLoS(e.x,e.y,player.x,player.y) || distC<=1) e.lastSeenTs=now;
-            if(tooFar || (now - e.lastSeenTs) > e.loseAggroMs){
-              e.aggro=false; e.path = bfs(e.x,e.y,e.spawnX,e.spawnY)||[]; e.mode='return';
+    // === Portali ===
+    checkPortalAndTeleport();
+
+    // === Enemy AI ===
+    var now=performance.now();
+    for(var j=0;j<enemies.length;j++){
+      var e=enemies[j];
+      var distC=chebyshev(e, player);
+      if(!e.aggro && distC<=e.aggroRange){ e.aggro=true; e.lastSeenTs=now; }
+
+      var tooFar = chebyshev({x:e.spawnX,y:e.spawnY}, player) > e.leashRange || distC > e.leashRange;
+      if(e.aggro){
+        if(hasLoS(e.x,e.y,player.x,player.y) || distC<=1) e.lastSeenTs=now;
+        if(tooFar || (now - e.lastSeenTs) > e.loseAggroMs){
+          e.aggro=false; e.path = bfs(e.x,e.y,e.spawnX,e.spawnY)||[]; e.mode='return';
+        }
+      }
+
+      e.moveTick=(e.moveTick+1)%e.moveEvery;
+      var canMove = (e.moveTick===0);
+
+      if(e.aggro){
+        if(e.type==='melee'){
+          if(canMove){
+            if(chebyshev(e,player)>1 || !hasLoS(e.x,e.y,player.x,player.y)){
+              e.path = bfsToAdjacencySmart(e.x,e.y,player.x,player.y,'melee') || e.path || [];
             }
+            tryStepAlongPath(e);
           }
-
-          e.moveTick=(e.moveTick+1)%e.moveEvery;
-          var canMove = (e.moveTick===0);
-
-          if(e.aggro){
-            if(e.type==='melee'){
-              if(canMove){
-                if(chebyshev(e,player)>1 || !hasLoS(e.x,e.y,player.x,player.y)){
-                  e.path = bfsToAdjacencySmart(e.x,e.y,player.x,player.y,'melee') || e.path || [];
-                }
-                tryStepAlongPath(e);
-              }
-              var near = (Math.abs(e.x-player.x)+Math.abs(e.y-player.y))<=1;
-              if(near && (now-e.lastHit)>=e.hitCd && !isCasting){
-                e.lastHit=now;
-                var base=rndInt(e.atkMin,e.atkMax);
-                var isCrit = rollCrit(0.05);
-                var dmg=Math.floor(base*(isCrit?1.5:1));
-                takePlayerDamage(dmg, isCrit?'CRIT -':'-');
-              }
-            } else { // ranged
-              var distM=manhattan(e,player);
-              var inRange = (distM>=e.rangeMin && distM<=e.rangeMax && hasLoS(e.x,e.y,player.x,player.y));
-              if(inRange){
-                if(now-e.lastShot>=e.atkCd){
-                  e.lastShot=now;
-                  var dx2=0,dy2=0;
-                  if(e.x===player.x) dy2=player.y>e.y?1:-1; else if(e.y===player.y) dx2=player.x>e.x?1:-1;
-                  if(dx2||dy2) projectiles.push({x:e.x,y:e.y,dx:dx2,dy:dy2,spdTick:0,dmg:rndInt(6,10)});
-                }
-                if(distM<e.rangeMin && canMove){
-                  var backX=e.x + (player.x<e.x?1:(player.x>e.x?-1:0));
-                  var backY=e.y + (player.y<e.y?1:(player.y>e.y?-1:0));
-                  if(walkable(backX,backY) && !(backX===player.x&&backY===player.y)){ e.x=backX; e.y=backY; }
-                }
-              } else {
-                if(canMove){
-                  if(distM>e.rangeMax || !hasLoS(e.x,e.y,player.x,player.y)){
-                    e.path = bfs(e.x,e.y,player.x,player.y) || e.path || [];
-                    tryStepAlongPath(e);
-                  }
-                }
-              }
-              var adj = (Math.max(Math.abs(e.x-player.x),Math.abs(e.y-player.y))===1);
-              if(adj && (now-e.lastPoke)>=e.pokeCd && !isCasting){
-                e.lastPoke=now;
-                var base2=rndInt(4,7);
-                var isCrit2 = rollCrit(0.05);
-                var dmg2=Math.floor(base2*(isCrit2?1.5:1));
-                takePlayerDamage(dmg2, isCrit2?'CRIT -':'-');
-              }
+          var near = (Math.abs(e.x-player.x)+Math.abs(e.y-player.y))<=1;
+          if(near && (now-e.lastHit)>=e.hitCd && !isCasting){
+            e.lastHit=now;
+            var base=rndInt(e.atkMin,e.atkMax);
+            var isCrit = rollCrit(0.05);
+            var dmg=Math.floor(base*(isCrit?1.5:1));
+            takePlayerDamage(dmg, isCrit?'CRIT -':'-');
+          }
+        } else { // ranged
+          var distM=manhattan(e,player);
+          var inRange = (distM>=e.rangeMin && distM<=e.rangeMax && hasLoS(e.x,e.y,player.x,player.y));
+          if(inRange){
+            if(now-e.lastShot>=e.atkCd){
+              e.lastShot=now;
+              var dx2=0,dy2=0;
+              if(e.x===player.x) dy2=player.y>e.y?1:-1; else if(e.y===player.y) dx2=player.x>e.x?1:-1;
+              if(dx2||dy2) projectiles.push({x:e.x,y:e.y,dx:dx2,dy:dy2,spdTick:0,dmg:rndInt(6,10)});
+            }
+            if(distM<e.rangeMin && canMove){
+              var backX=e.x + (player.x<e.x?1:(player.x>e.x?-1:0));
+              var backY=e.y + (player.y<e.y?1:(player.y>e.y?-1:0));
+              if(walkable(backX,backY) && !(backX===player.x&&backY===player.y)){ e.x=backX; e.y=backY; }
             }
           } else {
-            if((e.x!==e.spawnX || e.y!==e.spawnY)){
-              if(canMove){
-                if(!e.path || !e.path.length) e.path = bfs(e.x,e.y,e.spawnX,e.spawnY) || [];
+            if(canMove){
+              if(distM>e.rangeMax || !hasLoS(e.x,e.y,player.x,player.y)){
+                e.path = bfs(e.x,e.y,player.x,player.y) || e.path || [];
                 tryStepAlongPath(e);
               }
-            } else {
-              e.mode='idle'; e.path=[];
             }
           }
-        }
-
-        // Proiettili
-        for(var pi=projectiles.length-1; pi>=0; pi--){
-          var pr=projectiles[pi];
-          pr.spdTick=(pr.spdTick+1)%2; if(pr.spdTick!==0) continue;
-          var nx=pr.x+pr.dx, ny=pr.y+pr.dy;
-          if(!inside(nx,ny) || map[ny][nx]===1){ projectiles.splice(pi,1); continue; }
-          if(nx===player.x && ny===player.y){
-            var isCrit = rollCrit(0.05);
-            var dmgp = Math.floor(pr.dmg * (isCrit?1.5:1));
-            takePlayerDamage(dmgp, isCrit?'CRIT -':'-');
-            projectiles.splice(pi,1);
-            continue;
-          }
-          pr.x=nx; pr.y=ny;
-        }
-
-        // PICKUP magnet
-        for(var c=coins.length-1;c>=0;c--){
-          if(isAdjacent(coins[c].x,coins[c].y,player.x,player.y)){
-            coins.splice(c,1); player.coins++; questAdd('coin',1); gainXP(2); logLoot('Moneta +1');
+          var adj = (Math.max(Math.abs(e.x-player.x),Math.abs(e.y-player.y))===1);
+          if(adj && (now-e.lastPoke)>=e.pokeCd && !isCasting){
+            e.lastPoke=now;
+            var base2=rndInt(4,7);
+            var isCrit2 = rollCrit(0.05);
+            var dmg2=Math.floor(base2*(isCrit2?1.5:1));
+            takePlayerDamage(dmg2, isCrit2?'CRIT -':'-');
           }
         }
-        for(var p=potions.length-1;p>=0;p--){
-          if(isAdjacent(potions[p].x,potions[p].y,player.x,player.y)){
-            potions.splice(p,1); player.pots++; updateHotbarCounts(); logLoot('Pozione +1');
+      } else {
+        if((e.x!==e.spawnX || e.y!==e.spawnY)){
+          if(canMove){
+            if(!e.path || !e.path.length) e.path = bfs(e.x,e.y,e.spawnX,e.spawnY) || [];
+            tryStepAlongPath(e);
           }
+        } else {
+          e.mode='idle'; e.path=[];
         }
-
-        // Loot
-        var onBag = !!getBagAt(player.x, player.y);
-        if(!onBag) btnLoot.style.display='none';
-        
-function openLootIfAny(){
-  var bag = getBagAt(player.x, player.y);
-  if(!bag){ btnLoot.style.display='none'; return; }
-
-  // anti-riapertura immediata dopo chiusura manuale
-  var key = bagKey(bag);
-  if (lootSuppress.id === key && performance.now() < lootSuppress.until) {
-    btnLoot.style.display='block';
-    return;
-  }
-
-  btnLoot.style.display='block';
-
-  // auto-raccolta se contiene solo monete/pozioni
-  var commonOnly = true;
-  for (var i = 0; i < bag.items.length; i++){
-    var t = bag.items[i].type;
-    if (t !== 'coin' && t !== 'potion') { commonOnly = false; break; }
-  }
-
-  if (commonOnly){
-    var beforeCoins = player.coins, beforePots = player.pots;
-    var emptied = autoPickupCommons(bag);
-    var coinsGained = player.coins - beforeCoins;
-    var potsGained  = player.pots  - beforePots;
-
-    if (emptied) { lootBags.splice(lootBags.indexOf(bag),1); btnLoot.style.display='none'; }
-    else { renderLoot(bag); lootWin.classList.remove('hidden'); }
-
-    updateHotbarCounts(); draw(); drawMini();
-    if (coinsGained || potsGained){
-      toast('Raccolto: ' + (coinsGained?('🪙 x'+coinsGained+' '):'') + (potsGained?('🍵 x'+potsGained):''));
-      if(coinsGained) logLoot('Monete +' + coinsGained);
-      if(potsGained)  logLoot('Pozioni +' + potsGained);
+      }
     }
-    return;
-  }
 
-  // altrimenti apri la finestra
-  renderLoot(bag);
-  lootWin.classList.remove('hidden');
-}
+    // === Proiettili ===
+    for(var pi=projectiles.length-1; pi>=0; pi--){
+      var pr=projectiles[pi];
+      pr.spdTick=(pr.spdTick+1)%2; if(pr.spdTick!==0) continue;
+      var nx=pr.x+pr.dx, ny=pr.y+pr.dy;
+      if(!inside(nx,ny) || map[ny][nx]===1){ projectiles.splice(pi,1); continue; }
+      if(nx===player.x && ny===player.y){
+        var isCrit = rollCrit(0.05);
+        var dmgp = Math.floor(pr.dmg * (isCrit?1.5:1));
+        takePlayerDamage(dmgp, isCrit?'CRIT -':'-');
+        projectiles.splice(pi,1);
+        continue;
+      }
+      pr.x=nx; pr.y=ny;
+    }
 
-lootWin.classList.remove('hidden');
+    // === Pickup magnet (monete/pozioni loose) ===
+    for(var c=coins.length-1;c>=0;c--){
+      if(isAdjacent(coins[c].x,coins[c].y,player.x,player.y)){
+        coins.splice(c,1); player.coins++; questAdd('coin',1); gainXP(2); logLoot('Moneta +1');
+      }
+    }
+    for(var p=potions.length-1;p>=0;p--){
+      if(isAdjacent(potions[p].x,potions[p].y,player.x,player.y)){
+        potions.splice(p,1); player.pots++; updateHotbarCounts(); logLoot('Pozione +1');
+      }
+    }
+
+    // === Loot (SOLO toggle del pulsante) ===
+    var onBag = !!getBagAt(player.x, player.y);
+    if(!onBag) {
+      btnLoot.style.display = 'none';
+    } else {
+      btnLoot.style.display = 'block';
+    }
+
+  }catch(e){ panic('step', e); }
 }
-    function tryStepAlongPath(e){
+    
+  function tryStepAlongPath(e){
       if(!e.path || !e.path.length) return;
       var nxt=e.path.shift();
       if(!walkable(nxt.x,nxt.y)) { e.path=[]; return; }
