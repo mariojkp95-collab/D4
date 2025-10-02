@@ -361,7 +361,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     // --- PLAYER / ENEMY
     var _eid=1; function giveId(e){ e.id=_eid++; return e; }
     var player={
-      x:1,y:1,
+      x:12,y:4,
       baseMaxHp:100, baseAtkMin:6, baseAtkMax:12,
       maxHp:100, hp:100, atkMin:6, atkMax:12,
       coins:0,pots:1,lastAtk:0,atkCd:450,lvl:1,exp:0,
@@ -390,7 +390,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     var enemies=[ makeSlime(COLS-2,ROWS-2), makeArcher(COLS-4,2) ];
 // === WORLD / MAP MANAGER (non distruttivo) ===
 var WORLD = {
-  current: 'main', // 'main' o 'spawn'
+  current: 'spawn', // 'main' o 'spawn'
   // Con COLS=15, ROWS=9 → portale sinistra in main, destra in spawn
   portals: {
     main:  [ { x: 1,  y: 4,  to: 'spawn', tx: 13, ty: 4 } ],
@@ -506,11 +506,15 @@ function checkPortalAndTeleport(){
   draw(); drawMini();
 }
 // inizializza la mappa iniziale
-buildMap('main');
+buildMap('spawn');
     // OGGETTI + PROIETTILI
-    var coins=[], potions=[], projectiles=[];
-    for(var i1=0;i1<4;i1++) coins.push(randEmpty());
-    for(var i2=0;i2<1;i2++) potions.push(randEmpty());
+var coins=[], potions=[], projectiles=[];
+
+// Popola oggetti iniziali SOLO nella mappa principale
+if (WORLD.current === 'main') {
+  for (var i1=0;i1<4;i1++) coins.push(randEmpty());
+  for (var i2=0;i2<1;i2++) potions.push(randEmpty());
+}
     
 
     // TARGET LOCK + AUTO-CHASE
