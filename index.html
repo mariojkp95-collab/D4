@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Drakoria — D3-COMPAT-XRQ1-HUDLITE</title>
+<title>Drakoria — D3-COMPAT-XRQ1-HUDLITE-TGT1</title>
 <style>
 :root{
   --bg:#0b1224; --panel:#0f172a; --stroke:#1f2a44; --text:#e5e7eb; --muted:#9ca3af;
@@ -63,10 +63,11 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 /* Pulsante mini map */
 #btnMini{ margin-left:8px }
 
-/* Hotbar basso */
+/* Hotbar basso — alzata per non coprire i FAB */
 .hotbar{
   position:fixed; left:50%; transform:translateX(-50%);
-  bottom:10px; display:flex; gap:8px; z-index:22;
+  bottom:80px; /* prima era 10px */
+  display:flex; gap:8px; z-index:22;
   background:rgba(15,23,42,.85); border:1px solid #1f2a44; padding:6px 8px; border-radius:12px; backdrop-filter: blur(4px);
 }
 .slot{
@@ -93,13 +94,13 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 <main>
   <canvas id="game" width="960" height="576" aria-label="Gioco"></canvas>
   <p class="help">
-    Clicca per muoverti • <b>🗡️</b> o <b>SPAZIO</b> per attaccare (nemico adiacente) •
+    Clicca per muoverti • tap su un <b>nemico</b> per <b>selezionarlo</b> • <b>🗡️</b> o <b>SPAZIO</b> attacca il <b>target</b> se adiacente •
     Raccogli <span class="coin">●</span> e <span class="potion">🍵</span> • Doppio tap = pozione
   </p>
   <div id="status"></div>
 </main>
 
-<!-- HUD azioni (restano anche i FAB, così non rompiamo abitudini) -->
+<!-- HUD azioni -->
 <button id="btnAttack" class="fab" aria-label="Attacca">🗡️</button>
 <canvas id="atkCdCanvas" width="56" height="56" aria-hidden="true"></canvas>
 <button id="btnUsePotion" class="fab" aria-label="Usa pozione">🍵</button>
@@ -130,9 +131,9 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 <div id="errBox" class="err" style="display:none"></div>
 
 <script>
-/* ===== Drakoria — BUILD D3-COMPAT-XRQ1-HUDLITE ===== */
+/* ===== Drakoria — BUILD D3-COMPAT-XRQ1-HUDLITE-TGT1 ===== */
 (function(){
-  var BUILD='D3-COMPAT-XRQ1-HUDLITE';
+  var BUILD='D3-COMPAT-XRQ1-HUDLITE-TGT1';
   var SAVE_KEY='save_xrq1_compat';
   var QUEST_KEY='quests_xrq1_compat';
 
@@ -168,6 +169,9 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     var coins=[], potions=[], projectiles=[];
     for(var i1=0;i1<6;i1++) coins.push(randEmpty());
     for(var i2=0;i2<2;i2++) potions.push(randEmpty());
+
+    // --- TARGET LOCK
+    var target=null;
 
     // --- HUD: floating damage texts
     var dmgTexts=[]; // {x,y,txt,color,ttl,vy}
@@ -290,12 +294,19 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
     cv.addEventListener('click',function(ev){
       var m=canvasToTile(ev), now=performance.now(), cd=(now-player.lastAtk)>=player.atkCd;
-      var i, adj=null;
-      for(i=0;i<enemies.length;i++){ var e=enemies[i]; if(chebyshev(player,e)===1 && inRect(m.sx,m.sy,enemyRect(e))){ adj=e; break; } }
-      if(adj && cd){ attackEnemy(adj); return; }
-      if(cd){
-        for(i=0;i<enemies.length;i++){ var e2=enemies[i]; if(chebyshev(player,e2)===1 && e2.x===m.tx && e2.y===m.ty){ attackEnemy(e2); return; } }
-      }
+
+      // 1) Se clicco un nemico → set target (anche se non adiacente)
+      var i, clickedEnemy=null;
+      for(i=0;i<enemies.length;i++){ var ee=enemies[i]; if(inRect(m.sx,m.sy,enemyRect(ee))){ clickedEnemy=ee; break; } }
+      if(clickedEnemy){ target = clickedEnemy; draw(); return; }
+
+      // 2) Se il target è adiacente e CD pronto → attacco
+      if(target && chebyshev(player,target)===1 && cd){ attackEnemy(target); return; }
+
+      // 3) Altrimenti: se clicco su un nemico adiacente → attacco
+      for(i=0;i<enemies.length;i++){ var e=enemies[i]; if(chebyshev(player,e)===1 && inRect(m.sx,m.sy,enemyRect(e)) && cd){ attackEnemy(e); return; } }
+
+      // 4) Altrimenti muovi
       var p=bfs(player.x,player.y,m.tx,m.ty); if(p && p.length) pathQueue=p;
     }, false);
 
@@ -306,6 +317,9 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
     function tryAttackAdjacent(){
       var now=performance.now(); if(now-player.lastAtk<player.atkCd) return false;
+      // priorità al target
+      if(target && chebyshev(player,target)===1){ attackEnemy(target); return true; }
+      // fallback: qualsiasi adiacente
       for(var i=0;i<enemies.length;i++){ var en=enemies[i]; if(chebyshev(player,en)===1){ attackEnemy(en); return true; } }
       return false;
     }
@@ -336,6 +350,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       var dmg=rndInt(player.atkMin,player.atkMax);
       t.hp=Math.max(0,t.hp-dmg); addDmgText(t.x,t.y,'-'+dmg,'#ffd166'); flashCircle(t.x,t.y,'#ff0000',0.25,26);
       if(t.hp===0){
+        if(target===t) target=null; // sgancia target se muore
         if(Math.random()<0.7) coins.push({x:t.x,y:t.y}); else potions.push({x:t.x,y:t.y});
         gainXP(t.type==='ranged'?25:20);
         enemies.splice(enemies.indexOf(t),1);
@@ -484,6 +499,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
         ctx.fillStyle = (map[y][x]===1)?getVar('--block'):(((x+y)%2===0)?getVar('--tileA'):getVar('--tileB'));
         ctx.fillRect(x*TILE,y*TILE,TILE,TILE);
       }
+      // items
       ctx.fillStyle=getVar('--coin');
       for(var i=0;i<coins.length;i++){ var c=coins[i]; var cx=c.x*TILE+TILE/2, cy=c.y*TILE+TILE/2; ctx.beginPath(); ctx.arc(cx,cy,10,0,Math.PI*2); ctx.fill(); }
       for(var k=0;k<potions.length;k++){ var po=potions[k]; var px=po.x*TILE, py=po.y*TILE;
@@ -492,12 +508,27 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
         ctx.fillStyle='#6d28d9'; ctx.fillRect(px+TILE/2-6,py+TILE/2-24,12,4);
         ctx.fillStyle='#0006'; ctx.beginPath(); ctx.ellipse(px+TILE/2,py+TILE-12,12,4,0,0,Math.PI*2); ctx.fill();
       }
-      for(var eI=0;eI<enemies.length;eI++){ var en=enemies[eI]; drawActor(en.x,en.y, en.type==='ranged' ? '#a855f7' : getVar('--enemy')); drawHpBar(en.x,en.y,en.hp,en.maxHp,true); }
-      drawActor(player.x,player.y,getVar('--player')); drawHpBar(player.x,player.y,player.hp,player.maxHp,false);
+      // enemies
+      for(var eI=0;eI<enemies.length;eI++){ var en=enemies[eI];
+        drawActor(en.x,en.y, en.type==='ranged' ? '#a855f7' : getVar('--enemy'));
+        drawHpBar(en.x,en.y,en.hp,en.maxHp,true, (target===en));
+        if(target===en) drawTargetRing(en.x,en.y);
+      }
+      // player
+      drawActor(player.x,player.y,getVar('--player'));
+      drawHpBar(player.x,player.y,player.hp,player.maxHp,false,false);
+
+      // projectiles
       for(var pp=0; pp<projectiles.length; pp++){ var pr=projectiles[pp]; var px2=pr.x*TILE+TILE/2, py2=pr.y*TILE+TILE/2; ctx.fillStyle='#f87171'; ctx.beginPath(); ctx.arc(px2,py2,6,0,Math.PI*2); ctx.fill(); }
+
+      // floating damage
       drawDmgTexts();
+
+      // XP bar
       drawXpBar();
-      statusEl.textContent = 'build: '+BUILD+' | LV '+player.lvl+' | HP '+player.hp+'/'+player.maxHp+' | coins '+player.coins+' | pots '+player.pots;
+
+      // status + build
+      statusEl.textContent = 'build: '+BUILD+' | LV '+player.lvl+' | HP '+player.hp+'/'+player.maxHp+' | coins '+player.coins+' | pots '+player.pots+(target?' | target lock ON':'');
       ctx.fillStyle='#ffffffcc'; ctx.font='bold 14px system-ui'; ctx.fillText('BUILD '+BUILD, 8, 24);
     }
 
@@ -506,13 +537,22 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       ctx.fillStyle=getVar('--shadow'); ctx.beginPath(); ctx.ellipse(x+TILE/2,y+TILE-12,18,6,0,0,Math.PI*2); ctx.fill();
       ctx.fillStyle=color; ctx.fillRect(x+TILE/2-16,y+TILE/2-22,32,36);
     }
-    function drawHpBar(tx,ty,hp,maxHp,isEnemy){
+    function drawHpBar(tx,ty,hp,maxHp,isEnemy,isTarget){
       var x=tx*TILE, y=ty*TILE, w=40, h=6, px=x+TILE/2-w/2, py=y+TILE/2-32;
       var r=Math.max(0,Math.min(1,hp/maxHp));
       var col='#10b981'; if(isEnemy){ if(r<0.66) col='#f59e0b'; if(r<0.33) col='#ef4444'; }
       ctx.fillStyle=getVar('--hpBack'); ctx.fillRect(px,py,w,h);
       ctx.fillStyle=col; ctx.fillRect(px,py,w*r,h);
-      ctx.strokeStyle='#0008'; ctx.strokeRect(px,py,w,h);
+      ctx.strokeStyle=isTarget ? '#f87171' : '#0008';
+      ctx.lineWidth=isTarget ? 2 : 1;
+      ctx.strokeRect(px,py,w,h);
+      ctx.lineWidth=1;
+    }
+    function drawTargetRing(tx,ty){
+      var x=tx*TILE+TILE/2, y=ty*TILE+TILE/2;
+      ctx.save();
+      ctx.strokeStyle='#ef4444'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(x,y,28,0,Math.PI*2); ctx.stroke();
+      ctx.restore();
     }
     function drawXpBar(){
       var pad=6, h=10, x=pad, y=pad, w=cv.width-pad*2, need=(player.lvl<MAX_LVL?xpNeeded(player.lvl):1), ratio=(player.lvl<MAX_LVL?Math.max(0,Math.min(1,player.exp/need)):1);
@@ -535,7 +575,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       c.arc(cx,cy,r-2,-Math.PI/2, -Math.PI/2 + ratio*2*Math.PI); c.stroke();
     }
 
-    // --- Mini-mappa (80x48 px → 1 tile = ~5x5 sul canvas visibile 160x96 css)
+    // --- Mini-mappa
     function drawMini(){
       if(miniWrap.classList.contains('hidden')) return;
       miniCtx.clearRect(0,0,mini.width,mini.height);
@@ -544,18 +584,13 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
         miniCtx.fillStyle = (map[y][x]===1)?'#2b3b66':'#164e24';
         miniCtx.fillRect(x* (mini.width/COLS), y* (mini.height/ROWS), (mini.width/COLS), (mini.height/ROWS));
       }
-      // coins
       miniCtx.fillStyle='#facc15';
       for(var i=0;i<coins.length;i++){ var c=coins[i]; miniCtx.fillRect(c.x*(mini.width/COLS)+1, c.y*(mini.height/ROWS)+1, 2,2); }
-      // potions
       miniCtx.fillStyle='#a78bfa';
       for(var p=0;p<potions.length;p++){ var po=potions[p]; miniCtx.fillRect(po.x*(mini.width/COLS)+1, po.y*(mini.height/ROWS)+1, 2,2); }
-      // enemies
       for(var eI=0;eI<enemies.length;eI++){ var en=enemies[eI]; miniCtx.fillStyle=(en.type==='ranged')?'#a855f7':'#ef4444';
         miniCtx.fillRect(en.x*(mini.width/COLS)+1, en.y*(mini.height/ROWS)+1, 3,3); }
-      // player
       miniCtx.fillStyle='#3b82f6'; miniCtx.fillRect(player.x*(mini.width/COLS)+1, player.y*(mini.height/ROWS)+1, 3,3);
-      // frame
       miniCtx.strokeStyle='#1f2a44'; miniCtx.strokeRect(0.5,0.5, mini.width-1, mini.height-1);
     }
 
