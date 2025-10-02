@@ -370,6 +370,9 @@ function bagKey(b){ return b.x+','+b.y; }
       critChance:0.10, critMult:1.5
     };
     recomputeStats(true);
+    
+    // Traccia l'ultima posizione del player per l'edge-trigger dei portali
+var lastPlayerX = player.x, lastPlayerY = player.y;
 
     function makeSlime(x,y){
       return giveId({
@@ -481,52 +484,47 @@ function drawPortals(ctx, tileSize){
 
 // se il player entra nel portale → teletrasporto
 
-// ... dopo il blocco "movimento su path"
-var movedThisTick = (player.x !== lastPlayerX || player.y !== lastPlayerY);
-
-// === Portali (solo quando entri nella casella in questo tick) ===
-checkPortalAndTeleport(movedThisTick);
-
-// aggiorna “last” a fine tick
-lastPlayerX = player.x; 
-lastPlayerY = player.y;
 
 function checkPortalAndTeleport(justEntered){
-  if(!justEntered) return; // <<— NOVITÀ: non triggerare se non hai appena fatto il passo dentro
+  // Edge-trigger: non fare nulla se non hai appena mosso
+  if(!justEntered) return;
+
   var now = performance.now();
   if (now < teleportGuardUntil) return;
 
   var px = player.x, py = player.y;
- 
+
+  // C'è un portale sotto i piedi?
   var list = WORLD.portals[WORLD.current] || [];
   var hit = null;
-  for(var i=0;i<list.length;i++){ var p=list[i]; if(p.x===px && p.y===py){ hit=p; break; } }
+  for(var i=0;i<list.length;i++){
+    var p=list[i];
+    if(p.x===px && p.y===py){ hit=p; break; }
+  }
   if(!hit) return;
 
-  // Cambia mappa (puro)
-var res = buildMap(hit.to);
-map = res.map;
-applyTheme(res.themeVars);
-WORLD.current = hit.to;
+  // Cambia mappa: ricostruisci e applica tema
+  var res = buildMap(hit.to);
+  map = res.map;
+  applyTheme(res.themeVars);
+  WORLD.current = hit.to;
 
-  // Esci su una casella adiacente sicura (non sul portale)
+  // Scegli uscita sicura vicino al portale di destinazione
   var exit = findSafeExit(hit.to, hit.tx, hit.ty);
   player.x = exit.x; player.y = exit.y;
-  
-  // Pulizie/spawn minimi dipendenti dal mondo
-if (WORLD.current === 'spawn'){
-  // nello spawn: niente oggetti a terra, niente proiettili, niente nemici
-  coins.length = 0;
-  potions.length = 0;
-  projectiles.length = 0;
-  enemies.length = 0;
-} else if (WORLD.current === 'main' && enemies.length === 0){
-  // se entri in main e non ci sono nemici, creane 2 come prima
-  enemies.push(makeSlime(COLS-2, ROWS-2));
-  enemies.push(makeArcher(COLS-4, 2));
-}
 
-  // Ferma eventuale path in corso e proteggi per ~0.45s
+  // Ripulisci/spawna in base al mondo
+  if (WORLD.current === 'spawn'){
+    coins.length = 0;
+    potions.length = 0;
+    projectiles.length = 0;
+    enemies.length = 0;
+  } else if (WORLD.current === 'main' && enemies.length === 0){
+    enemies.push(makeSlime(COLS-2, ROWS-2));
+    enemies.push(makeArcher(COLS-4, 2));
+  }
+
+  // Ferma path in corso e metti guardia anti-rientro
   if (Array.isArray(pathQueue)) pathQueue.length = 0;
   teleportGuardUntil = performance.now() + 450;
 
@@ -634,7 +632,7 @@ function randEmpty(){
 function walkable(x,y){
   if (!inside(x,y)) return false;
   if (map[y][x]!==0) return false;
-  if (isPortalTile(WORLD.current, x, y)) return false;
+  // non blocchiamo i portali: ci serve poterci entrare
   return true;
 }
 
@@ -1304,8 +1302,11 @@ if (d && d.world) {
       if(!blocked){ player.x=next.x; player.y=next.y; } else pathQueue=[];
     }
 
-    // === Portali ===
-    checkPortalAndTeleport();
+    // === Portali (edge-trigger: attiva solo se hai appena mosso) ===
+var justEntered = (player.x !== lastPlayerX || player.y !== lastPlayerY);
+checkPortalAndTeleport(justEntered);
+lastPlayerX = player.x;
+lastPlayerY = player.y;
 
     // === Enemy AI ===
     var now=performance.now();
