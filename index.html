@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Drakoria — D3-AI1-AGGRO</title>
+<title>Drakoria — D3-AI1-AGGRO-FIX1</title>
 <style>
 :root{
   --bg:#0b1224; --panel:#0f172a; --stroke:#1f2a44; --text:#e5e7eb; --muted:#9ca3af;
@@ -157,9 +157,9 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 <div id="errBox" class="err" style="display:none"></div>
 
 <script>
-/* ===== Drakoria — BUILD D3-AI1-AGGRO ===== */
+/* ===== Drakoria — BUILD D3-AI1-AGGRO-FIX1 ===== */
 (function(){
-  var BUILD='D3-AI1-AGGRO';
+  var BUILD='D3-AI1-AGGRO-FIX1';
   var SAVE_KEY='save_xrq1_inv';
   var QUEST_KEY='quests_xrq1_inv';
 
@@ -212,13 +212,11 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     };
     recomputeStats(true);
 
-    // Tipi: slime (melee), archer (ranged) con dati AI
     function makeSlime(x,y){
       return giveId({
         kind:'slime', type:'melee', x:x, y:y, spawnX:x, spawnY:y,
         hp:60,maxHp:60, atkMin:5,atkMax:9,
         hitCd:800,lastHit:0,
-        // AI
         aggro:false, aggroRange:5, leashRange:15, loseAggroMs:6000, lastSeenTs:0,
         moveTick:0, moveEvery:6, path:[], mode:'idle'
       });
@@ -228,25 +226,24 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
         kind:'archer', type:'ranged', x:x, y:y, spawnX:x, spawnY:y,
         hp:40,maxHp:40, atkCd:1200,lastShot:0, rangeMin:3, rangeMax:7,
         pokeCd:700,lastPoke:0,
-        // AI
         aggro:false, aggroRange:7, leashRange:15, loseAggroMs:6000, lastSeenTs:0,
         moveTick:0, moveEvery:6, path:[], mode:'idle'
       });
     }
     var enemies=[ makeSlime(COLS-2,ROWS-2), makeArcher(COLS-4,2) ];
 
-    // --- OGGETTI LEGACY + PROIETTILI
+    // OGGETTI + PROIETTILI
     var coins=[], potions=[], projectiles=[];
     for(var i1=0;i1<4;i1++) coins.push(randEmpty());
     for(var i2=0;i2<1;i2++) potions.push(randEmpty());
 
-    // --- TARGET LOCK + AUTO-CHASE
+    // TARGET LOCK + AUTO-CHASE
     var target=null, autoChase=false, lastEnemyTapTs=0, lastEnemyTapId=-1;
 
-    // --- HUD: danni fluttuanti
+    // HUD: danni fluttuanti
     var dmgTexts=[];
 
-    // --- XP / LEVEL
+    // XP / LEVEL
     var MAX_LVL=99;
     function xpNeeded(l){ return Math.floor(50*Math.pow(l,1.5)); }
     function gainXP(n){
@@ -275,7 +272,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       if(player.hp>player.maxHp) player.hp = player.maxHp;
     }
 
-    // --- QUEST
+    // QUEST
     var quests=[{id:'q1',title:'Raccogli 10 monete',desc:'Trova e raccogli 10 monete.',type:'collect',needed:10,progress:0,status:'active',reward:{xp:50,pots:1}}];
     var currentQuest=0;
     function renderQuest(){
@@ -308,7 +305,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     btnQuestClose.addEventListener('click', function(){ questPanel.classList.add('hidden'); }, false);
     renderQuest();
 
-    // --- UTILS
+    // UTILS
     function inside(x,y){ return x>=0&&y>=0&&x<COLS&&y<ROWS; }
     function walkable(x,y){ return inside(x,y)&&map[y][x]===0; }
     function manhattan(a,b){ return Math.abs(a.x-b.x)+Math.abs(a.y-b.y); }
@@ -333,7 +330,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       } return {x:2,y:2};
     }
 
-    // --- PATHFIND
+    // PATHFIND
     function bfs(sx,sy,tx,ty){
       if(!walkable(tx,ty)) return null;
       var q=[{x:sx,y:sy}], head=0;
@@ -372,7 +369,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       return bestPath;
     }
 
-    // --- INPUT
+    // INPUT
     var pathQueue=[], lastTapTs=0;
     function canvasToTile(ev){
       var r=cv.getBoundingClientRect();
@@ -388,7 +385,8 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     function inRect(px,py,r){ return px>=r.x&&px<=r.x+r.w&&py>=r.y&&py<=r.y+r.h; }
 
     cv.addEventListener('click',function(ev){
-      var m=canvasToTile formul=ev, now=performance.now(), cd=(now-player.lastAtk)>=player.atkCd;
+      // ✅ FIX: chiamata corretta
+      var m = canvasToTile(ev), now=performance.now(), cd=(now-player.lastAtk)>=player.atkCd;
 
       var i, clickedEnemy=null;
       for(i=0;i<enemies.length;i++){ var ee=enemies[i]; if(inRect(m.sx,m.sy,enemyRect(ee))){ clickedEnemy=ee; break; } }
@@ -443,7 +441,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     btnUnequipWeapon.addEventListener('click', function(){ unequip('weapon'); }, false);
     btnUnequipArmor.addEventListener('click', function(){ unequip('armor'); }, false);
 
-    // --- COMBAT / INTERAZIONI
+    // COMBAT / INTERAZIONI
     function addDmgText(tx,ty,txt,color){ var px=tx*TILE+TILE/2, py=ty*TILE+TILE/2-28; dmgTexts.push({x:px,y:py,txt:txt,color:color,ttl:700,vy:-0.04}); }
     function updateDmgTexts(){ var dt=120; for(var i=dmgTexts.length-1;i>=0;i--){ var d=dmgTexts[i]; d.ttl-=dt; d.y+=d.vy*dt; if(d.ttl<=0) dmgTexts.splice(i,1); } }
     function drawDmgTexts(){ for(var i=0;i<dmgTexts.length;i++){ var d=dmgTexts[i]; var a=Math.max(0,Math.min(1,d.ttl/700)); ctx.save(); ctx.globalAlpha=a; ctx.fillStyle=d.color; ctx.font='bold 16px system-ui'; ctx.textAlign='center'; ctx.fillText(d.txt,d.x,d.y); ctx.restore(); } }
@@ -452,8 +450,6 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       var now=performance.now(); player.lastAtk=now;
       var dmg=rndInt(player.atkMin,player.atkMax);
       t.hp=Math.max(0,t.hp-dmg); addDmgText(t.x,t.y,'-'+dmg,'#ffd166'); flashCircle(t.x,t.y,'#ff0000',0.25,26);
-
-      // entra in aggro se colpito
       t.aggro=true; t.lastSeenTs=now;
 
       if(t.hp===0){
@@ -475,7 +471,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       return false;
     }
 
-    // ===== LOOT SYSTEM con DROP TABLES (come build precedente) =====
+    // ===== LOOT con DROP TABLES =====
     var BAG_TTL_MS = 90000;
     var BAG_WARN_MS = 10000;
 
@@ -554,14 +550,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       draw(); drawMini(); updateHotbarCounts();
     }
 
-    // --- INVENTARIO
-    var invWinOpen=false;
-    var inventory, equipped;
-    // (inventory & equipped sono già definiti sopra; qui solo UI)
-    var invGrid=document.getElementById('invGrid');
-    var eqWeaponName=document.getElementById('eqWeaponName'), eqArmorName=document.getElementById('eqArmorName');
-    var btnUnequipWeapon=document.getElementById('btnUnequipWeapon'), btnUnequipArmor=document.getElementById('btnUnequipArmor');
-
+    // INVENTARIO UI
     function applyItem(it){
       if(it.type==='coin'){ player.coins += it.qty; questAdd('coin', it.qty); }
       else if(it.type==='potion'){ player.pots += it.qty; }
@@ -574,8 +563,8 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       }
       inventory.push(it);
     }
-    document.getElementById('lootClose').addEventListener('click', function(){ lootWin.classList.add('hidden'); }, false);
-    document.getElementById('lootTakeAll').addEventListener('click', function(){
+    lootClose.addEventListener('click', function(){ lootWin.classList.add('hidden'); }, false);
+    lootTakeAll.addEventListener('click', function(){
       var bag=getBagAt(player.x,player.y); if(!bag) return;
       while(bag.items.length){ applyItem(bag.items.shift()); }
       lootBags.splice(lootBags.indexOf(bag),1);
@@ -628,13 +617,13 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       if(!equipped[slot]) return;
       inventory.push(equipped[slot]); equipped[slot]=null; recomputeStats(false); renderInventory(); draw(); toast('Rimosso equip.');
     }
-    document.getElementById('btnInventory').addEventListener('click', function(){ invWin.classList.toggle('hidden'); renderInventory(); }, false);
-    document.getElementById('invClose').addEventListener('click', function(){ invWin.classList.add('hidden'); }, false);
+    btnInventory.addEventListener('click', function(){ invWin.classList.toggle('hidden'); renderInventory(); }, false);
+    invClose.addEventListener('click', function(){ invWin.classList.add('hidden'); }, false);
     btnUnequipWeapon.addEventListener('click', function(){ unequip('weapon'); }, false);
     btnUnequipArmor.addEventListener('click', function(){ unequip('armor'); }, false);
 
-    // --- SAVE/LOAD/RESET
-    document.getElementById('btnSave').addEventListener('click', function(){
+    // SAVE/LOAD/RESET
+    btnSave.addEventListener('click', function(){
       try{
         var now=performance.now();
         var bags=lootBags.map(function(b){
@@ -650,7 +639,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       }catch(e){ panic('save',e); }
     }, false);
 
-    document.getElementById('btnLoad').addEventListener('click', function(){ try{
+    btnLoad.addEventListener('click', function(){ try{
       var raw=localStorage.getItem(SAVE_KEY); if(!raw) return alert('Nessun salvataggio.');
       var d=JSON.parse(raw), i,y,x;
       if(d && d.map && d.map.length===ROWS){ for(y=0;y<ROWS;y++){ for(x=0;x<COLS;x++){ map[y][x]=d.map[y][x]|0; } } }
@@ -675,12 +664,11 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       toast('Caricato.');
     }catch(e){ panic('load',e); } }, false);
 
-    document.getElementById('btnReset').addEventListener('click', function(){ location.reload(); }, false);
+    btnReset.addEventListener('click', function(){ location.reload(); }, false);
 
-    // --- LOOP
+    // LOOP
     function step(){
       try{
-        // Auto-chase player
         if(autoChase && target){
           var stillThere=enemies.indexOf(target)!==-1;
           if(!stillThere){ autoChase=false; target=null; }
@@ -693,7 +681,6 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
           }
         }
 
-        // Player path
         if(pathQueue.length){
           var next=pathQueue.shift();
           var blocked=false, i;
@@ -702,16 +689,13 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
           if(!blocked){ player.x=next.x; player.y=next.y; } else pathQueue=[];
         }
 
-        // Enemy AI (aggro, leash, pathfinding)
+        // Enemy AI
         var now=performance.now();
         for(var j=0;j<enemies.length;j++){
           var e=enemies[j];
-
-          // Aggro check
           var distC=chebyshev(e, player);
           if(!e.aggro && distC<=e.aggroRange){ e.aggro=true; e.lastSeenTs=now; }
 
-          // Se in aggro ma player fuori vista da molto o troppo lontano → torna a casa
           var tooFar = chebyshev({x:e.spawnX,y:e.spawnY}, player) > e.leashRange || distC > e.leashRange;
           if(e.aggro){
             if(hasLoS(e.x,e.y,player.x,player.y) || distC<=1) e.lastSeenTs=now;
@@ -720,21 +704,17 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
             }
           }
 
-          // Movimento a tick
           e.moveTick=(e.moveTick+1)%e.moveEvery;
           var canMove = (e.moveTick===0);
 
           if(e.aggro){
-            // Aggro: path verso player (melee) o comportamento ranged
             if(e.type==='melee'){
               if(canMove){
-                // se non adiacente → path verso adiacenza
                 if(chebyshev(e,player)>1 || !hasLoS(e.x,e.y,player.x,player.y)){
                   e.path = bfsToAdjacencySmart(e.x,e.y,player.x,player.y,'melee') || e.path || [];
                 }
                 tryStepAlongPath(e);
               }
-              // attacco melee
               var near = (Math.abs(e.x-player.x)+Math.abs(e.y-player.y))<=1;
               if(near && (now-e.lastHit)>=e.hitCd){
                 e.lastHit=now; var dmg=rndInt(e.atkMin,e.atkMax);
@@ -751,14 +731,12 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
                   if(e.x===player.x) dy2=player.y>e.y?1:-1; else if(e.y===player.y) dx2=player.x>e.x?1:-1;
                   if(dx2||dy2) projectiles.push({x:e.x,y:e.y,dx:dx2,dy:dy2,spdTick:0,dmg:rndInt(6,10)});
                 }
-                // se troppo vicino, fai kite (indietreggia)
                 if(distM<e.rangeMin && canMove){
                   var backX=e.x + (player.x<e.x?1:(player.x>e.x?-1:0));
                   var backY=e.y + (player.y<e.y?1:(player.y>e.y?-1:0));
                   if(walkable(backX,backY) && !(backX===player.x&&backY===player.y)){ e.x=backX; e.y=backY; }
                 }
               } else {
-                // avvicinati con path verso adiacenze “di tiro” (basta avvicinarsi al player)
                 if(canMove){
                   if(distM>e.rangeMax || !hasLoS(e.x,e.y,player.x,player.y)){
                     e.path = bfs(e.x,e.y,player.x,player.y) || e.path || [];
@@ -766,7 +744,6 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
                   }
                 }
               }
-              // poke melee se adiacente
               var adj = (Math.max(Math.abs(e.x-player.x),Math.abs(e.y-player.y))===1);
               if(adj && (now-e.lastPoke)>=e.pokeCd){
                 e.lastPoke=now; var dmg2=rndInt(4,7);
@@ -775,7 +752,6 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
               }
             }
           } else {
-            // Non in aggro: torna a casa se non già lì
             if((e.x!==e.spawnX || e.y!==e.spawnY)){
               if(canMove){
                 if(!e.path || !e.path.length) e.path = bfs(e.x,e.y,e.spawnX,e.spawnY) || [];
@@ -818,7 +794,6 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     function tryStepAlongPath(e){
       if(!e.path || !e.path.length) return;
       var nxt=e.path.shift();
-      // evita di entrare nel player o in un altro nemico
       if(!walkable(nxt.x,nxt.y)) { e.path=[]; return; }
       for(var k=0;k<enemies.length;k++){ var other=enemies[k]; if(other!==e && other.x===nxt.x && other.y===nxt.y) { e.path=[]; return; } }
       if(nxt.x===player.x && nxt.y===player.y){ e.path=[]; return; }
@@ -828,7 +803,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     setInterval(step,120);
     draw(); drawAtkCooldown(); drawMini(); updateHotbarCounts();
 
-    // --- DRAW
+    // DRAW
     function draw(){
       ctx.clearRect(0,0,cv.width,cv.height);
       var x,y;
@@ -836,7 +811,6 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
         ctx.fillStyle = (map[y][x]===1)?getVar('--block'):(((x+y)%2===0)?getVar('--tileA'):getVar('--tileB'));
         ctx.fillRect(x*TILE,y*TILE,TILE,TILE);
       }
-      // items legacy
       ctx.fillStyle=getVar('--coin');
       for(var i=0;i<coins.length;i++){ var c=coins[i]; var cx=c.x*TILE+TILE/2, cy=c.y*TILE+TILE/2; ctx.beginPath(); ctx.arc(cx,cy,10,0,Math.PI*2); ctx.fill(); }
       for(var k=0;k<potions.length;k++){ var po=potions[k]; var px=po.x*TILE, py=po.y*TILE;
@@ -845,7 +819,6 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
         ctx.fillStyle='#6d28d9'; ctx.fillRect(px+TILE/2-6,py+TILE/2-24,12,4);
         ctx.fillStyle='#0006'; ctx.beginPath(); ctx.ellipse(px+TILE/2,py+TILE-12,12,4,0,0,Math.PI*2); ctx.fill();
       }
-      // loot
       var now=performance.now();
       for(var lb=0; lb<lootBags.length; lb++){
         var b=lootBags[lb], bx=b.x*TILE, by=b.y*TILE;
@@ -861,18 +834,15 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
         ctx.restore();
       }
 
-      // enemies
       for(var eI=0;eI<enemies.length;eI++){ var en=enemies[eI];
         var col = (en.type==='ranged') ? '#a855f7' : getVar('--enemy');
         drawActor(en.x,en.y,col);
         drawHpBar(en.x,en.y,en.hp,en.maxHp,true, (target===en));
         if(target===en){ drawTargetRing(en.x,en.y); }
       }
-      // player
       drawActor(player.x,player.y,getVar('--player'));
       drawHpBar(player.x,player.y,player.hp,player.maxHp,false,false);
 
-      // projectiles
       for(var pp=0; pp<projectiles.length; pp++){ var pr=projectiles[pp]; var px2=pr.x*TILE+TILE/2, py2=pr.y*TILE+TILE/2; ctx.fillStyle='#f87171'; ctx.beginPath(); ctx.arc(px2,py2,6,0,Math.PI*2); ctx.fill(); }
 
       drawDmgTexts();
