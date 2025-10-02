@@ -1,7 +1,144 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Drakoria — split core</title>
+<style>
+:root{
+  --bg:#0b1224; --panel:#0f172a; --stroke:#1f2a44; --text:#e5e7eb; --muted:#9ca3af;
+  --accent:#7c3aed;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto}
+header{display:flex;align-items:center;justify-content:space-between;background:var(--panel);border-bottom:1px solid var(--stroke);padding:8px 12px}
+header .left{display:flex;gap:8px;align-items:center}
+.btn{background:#26325a;color:#fff;border:1px solid #31406e;border-radius:8px;padding:6px 10px;cursor:pointer}
+.btn:disabled{opacity:.6}
+main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);border:1px solid var(--stroke);border-radius:12px}
+#game{display:block;width:100%;max-width:100%;background:#0a1630;border:1px solid #1c2746;border-radius:10px;image-rendering:pixelated;touch-action:manipulation}
+#status{margin-top:8px;color:#cbd5e1;min-height:20px}
+
+/* HUD: hotbar semplice (5 slot) */
+.hotbar{margin-top:10px;display:grid;grid-template-columns:repeat(5,56px);gap:8px;justify-content:start}
+.slot{position:relative;width:56px;height:56px;border:1px solid #31406e;border-radius:10px;display:grid;place-items:center;background:#101a35}
+.slot .lbl{position:absolute;top:3px;left:6px;font-size:12px;color:#9ca3af}
+.cap{font-size:20px}
+.cnt{position:absolute;bottom:4px;right:6px;font-size:12px;color:#9ca3af}
+
+/* Finestre */
+.win{position:fixed;top:64px;right:16px;width:320px;max-width:90vw;background:#0f172a;border:1px solid #1f2a44;border-radius:12px;box-shadow:0 18px 44px rgba(0,0,0,.45);z-index:20}
+.win.hidden{display:none}
+.win .wh{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid #1f2a44}
+.win .wb{padding:10px}
+#invGrid,#abilGrid{display:grid;grid-template-columns:1fr;gap:8px}
+.invItem,.abilItem{border:1px solid #223054;border-radius:10px;padding:8px;background:#0b162e}
+.invItem .row,.abilItem .row{margin-top:8px;display:flex;gap:8px;justify-content:flex-end}
+
+/* PATCH-01 overlay cooldown */
+.slot .cd{ position:absolute; inset:0; border-radius:10px;
+  background: conic-gradient(#0000 0deg, #0008 0deg); pointer-events:none }
+.slot.cooldown{ filter: grayscale(.15); opacity:.9 }
+
+/* FAB */
+.fab{position:fixed;right:14px;bottom:14px;width:56px;height:56px;border-radius:50%;border:1px solid #31406e;background:var(--accent);color:#fff;font-size:24px;display:grid;place-items:center;cursor:pointer;z-index:30}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="left">
+    <button class="btn" id="btnInventory">Inventario</button>
+    <button class="btn" id="btnAbilities">Abilità</button>
+    <button class="btn" id="btnHeal">+10 HP</button>
+  </div>
+  <div>HP: <span id="hpTxt">0/0</span> · EXP: <span id="expTxt">0%</span> · Lv <span id="lvTxt">1</span></div>
+</header>
+
+<main>
+  <canvas id="game" width="800" height="450"></canvas>
+  <div class="hotbar">
+    <div class="slot" id="slot1"><span class="lbl">1</span><span class="cap" id="slotCap1">🍵</span><span class="cnt" id="cntPot">0</span><span class="cd" id="cd1"></span></div>
+    <div class="slot" id="slot2"><span class="lbl">2</span><span class="cap" id="slotCap2">—</span><span class="cd" id="cd2"></span></div>
+    <div class="slot" id="slot3"><span class="lbl">3</span><span class="cap" id="slotCap3">—</span><span class="cd" id="cd3"></span></div>
+    <div class="slot" id="slot4"><span class="lbl">4</span><span class="cap" id="slotCap4">—</span><span class="cd" id="cd4"></span></div>
+    <div class="slot" id="slot5"><span class="lbl">5</span><span class="cap" id="slotCap5">—</span><span class="cd" id="cd5"></span></div>
+  </div>
+  <div id="status"></div>
+</main>
+
+<!-- Finestre -->
+<section class="win hidden" id="invWin">
+  <div class="wh">Inventario <button class="btn" id="invClose">Chiudi</button></div>
+  <div class="wb">
+    <div id="invGrid"></div>
+  </div>
+</section>
+
+<section class="win hidden" id="abilWin">
+  <div class="wh">Abilità <button class="btn" id="abilClose">Chiudi</button></div>
+  <div class="wb">
+    <div id="abilGrid"></div>
+  </div>
+</section>
+
 <!-- CORE -->
-<script src="game.js?bust=split1" defer></script>
-<!-- /PATCH-01 -->
-  <!-- ABIL-SIMPLE-PATCH: assegna abilità a hotbar e lanciale dagli slot (senza toccare inventario) -->
+<script src="game.js?bust=split2" defer></script>
+
+<!-- PATCH-01: cooldown grafico pozione (slot1) -->
+<script>
+(function(){
+  const CD_MS = 5000;
+  function ensureOverlay(){
+    for(let i=1;i<=5;i++){
+      const slot = document.getElementById('slot'+i);
+      if(!slot) continue;
+      if(!slot.querySelector('.cd')){
+        const span=document.createElement('span'); span.className='cd'; span.id='cd'+i;
+        slot.appendChild(span);
+      }
+    }
+  }
+  let cdEnd = 0;
+  function startCd(){
+    cdEnd = performance.now() + CD_MS;
+    document.getElementById('slot1')?.classList.add('cooldown');
+    raf();
+  }
+  function raf(){
+    if(!cdEnd) return;
+    const now=performance.now(), left=cdEnd-now, el=document.getElementById('cd1');
+    if(!el) return;
+    if(left>0){
+      const ratio = Math.max(0,Math.min(1,left/CD_MS));
+      const deg = Math.floor(360*ratio);
+      el.style.background = 'conic-gradient(#0008 '+deg+'deg, #0000 '+deg+'deg)';
+      requestAnimationFrame(raf);
+    } else {
+      document.getElementById('slot1')?.classList.remove('cooldown');
+      el.style.background = 'conic-gradient(#0000 0deg, #0008 0deg)';
+      cdEnd=0;
+    }
+  }
+  function tryStartAfterUse(){
+    const elCnt=document.getElementById('cntPot');
+    const before = elCnt ? elCnt.textContent.trim() : '';
+    setTimeout(function(){
+      const after = elCnt ? elCnt.textContent.trim() : '';
+      if(after!==before){ startCd(); }
+    }, 40);
+  }
+  function setup(){
+    ensureOverlay();
+    document.getElementById('slot1')?.addEventListener('click', tryStartAfterUse, true);
+    document.getElementById('btnUsePotion')?.addEventListener('click', tryStartAfterUse, true);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', setup);
+  else setup();
+})();
+</script>
+
+<!-- ABIL-SIMPLE-PATCH: abilità in hotbar + uso dagli slot -->
 <script>
 (function(){
   const SLOT_IDS=[null,'slot1','slot2','slot3','slot4','slot5'];
@@ -9,8 +146,6 @@
   const $ = s => document.querySelector(s);
   const $$ = s => Array.from(document.querySelectorAll(s));
   function toast(msg){ try{ (window.statusEl||$('#status')).textContent='[ABIL] '+msg; }catch(e){} }
-
-  /* Picker minimale per scegliere slot 1..5 */
   function ensurePicker(){
     if($('#abilPick')) return;
     const w=document.createElement('section');
@@ -32,9 +167,7 @@
       if(t.classList.contains('pickS')){ const s=+t.dataset.s; const cb=window._abilPickCb; window._abilPickCb=null; w.style.display='none'; if(cb) cb(s); }
     }, false);
   }
-  function openPicker(cb){ ensurePicker(); window._abilPickCb=cb; $('#abilPick').style.display='grid'; }
-
-  /* Binding sugli slot (dataset + icona) */
+  function openPicker(cb){ ensurePicker(); window._abilPickCb=cb; document.getElementById('abilPick').style.display='grid'; }
   function setSlotBinding(slot, binding){ // {kind:'ability', icon, abId}
     const el=document.getElementById(SLOT_IDS[slot]); const cap=document.getElementById(CAP_IDS[slot]);
     if(!el||!cap) return;
@@ -43,10 +176,8 @@
     el.dataset.icon=binding.icon||'✨';
     cap.textContent=binding.icon||'✨';
   }
-
-  /* Trasforma le card abilità: aggiungi “→ Barra”, abilita drag opzionale e long-press */
   function enhanceAbilitiesOnce(){
-    const grid = $('#abilGrid'); if(!grid) return;
+    const grid = document.getElementById('abilGrid'); if(!grid) return;
     $$('#abilGrid .abilItem').forEach(card=>{
       if(card._abilDone) return;
       const cap = card.querySelector('.cap');
@@ -54,7 +185,6 @@
       const name=(cap?.textContent||'Abilità').trim();
       const abId='ab_'+name.toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'');
 
-      // bottone → Barra
       const row = card.querySelector('.row') || card;
       if(!row.querySelector('.btnToBar')){
         const btn=document.createElement('button');
@@ -65,7 +195,7 @@
         row.appendChild(btn);
       }
 
-      // drag (desktop) – opzionale
+      // drag (desktop)
       card.draggable=true;
       card.addEventListener('dragstart', e=>{
         e.dataTransfer.setData('text/plain', `ability:${abId}|icon:${encodeURIComponent(icon)}`);
@@ -83,12 +213,34 @@
       card._abilDone = true;
     });
   }
-
-  /* Drop sugli slot + tap per lanciare abilità */
+  function triggerAbility(abId){
+    if(!abId) return;
+    const abilWin = document.getElementById('abilWin');
+    const wasHidden = abilWin ? abilWin.classList.contains('hidden') : true;
+    if(wasHidden) document.getElementById('btnAbilities')?.click();
+    setTimeout(()=>{
+      const cards=[...document.querySelectorAll('#abilGrid .abilItem')];
+      const card = cards.find(c=>{
+        const cap=c.querySelector('.cap')?.textContent||'';
+        const id='ab_'+cap.toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'');
+        return id===abId;
+      }) || cards[0];
+      card?.querySelector('.btnCast')?.click();
+      if(wasHidden) document.getElementById('abilClose')?.click();
+    }, 50);
+  }
   function enableSlotsOnce(){
+    const SLOT_IDS=[null,'slot1','slot2','slot3','slot4','slot5'];
     for(let s=1;s<=5;s++){
       const el=document.getElementById(SLOT_IDS[s]); if(!el) continue;
-
+      if(!el._abilTap){
+        const handler=(e)=>{ e.preventDefault(); e.stopPropagation(); 
+          if((el.dataset.kind||'')==='ability'){ triggerAbility(el.dataset.abId); } 
+        };
+        el.addEventListener('click', handler, true);
+        el.addEventListener('touchend', handler, {passive:false, capture:true});
+        el._abilTap=true;
+      }
       if(!el._abilDrop){
         el.addEventListener('dragover', e=>{ e.preventDefault(); }, false);
         el.addEventListener('drop', e=>{
@@ -99,71 +251,23 @@
             const icon=decodeURIComponent((data.match(/icon:([^|]+)/)||[])[1]||'✨');
             if(!abId) return;
             setSlotBinding(s,{kind:'ability',icon,abId});
-            toast(`Abilità -> slot ${s}`);
           }
         }, false);
         el._abilDrop=true;
       }
-
-      if(!el._abilTap){
-        const handler=(e)=>{ e.preventDefault(); e.stopPropagation(); onSlotTapAbility(s); };
-        el.addEventListener('click', handler, true);
-        el.addEventListener('touchend', handler, {passive:false, capture:true});
-        el._abilTap=true;
-      }
     }
   }
-
-  /* Tap slot: lancia l’abilità assegnata simulando click su “Lancia” della card */
-  function onSlotTapAbility(slot){
-    const el=document.getElementById(SLOT_IDS[slot]); if(!el) return;
-    if((el.dataset.kind||'')!=='ability'){ return; }
-    const abId=el.dataset.abId; if(!abId) return;
-
-    const abilWin = $('#abilWin');
-    const wasHidden = abilWin ? abilWin.classList.contains('hidden') : true;
-
-    // Apri Abilità se è chiusa
-    if(wasHidden) $('#btnAbilities')?.click();
-
-    setTimeout(()=>{
-      const cards = $$('#abilGrid .abilItem');
-      // trova la card con lo stesso abId generato
-      const card = cards.find(c=>{
-        const cap=c.querySelector('.cap')?.textContent||'';
-        const id='ab_'+cap.toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'');
-        return id===abId;
-      }) || cards[0];
-
-      // clicca il bottone “Lancia” dentro la card (se c'è), altrimenti il primo .btn
-      let btn = card?.querySelector('.btn');
-      if(!btn){
-        btn = card?.querySelector('button');
-      }
-      btn?.click();
-
-      // richiudi se l’avevamo aperta noi
-      if(wasHidden) $('#abilClose')?.click();
-    }, 50);
-  }
-
-  /* Hook iniziali: una sola passata quando apri la finestra Abilità */
   function init(){
-    ensurePicker();
     enableSlotsOnce();
-
-    const abBtn = $('#btnAbilities');
-    if(abBtn && !abBtn._abilInit){
-      abBtn.addEventListener('click', ()=> setTimeout(enhanceAbilitiesOnce, 40), false);
-      abBtn._abilInit = true;
-    }
-    toast('Abilità → hotbar attivo (semplice)');
+    document.getElementById('btnAbilities')?.addEventListener('click', ()=> setTimeout(enhanceAbilitiesOnce, 30), false);
   }
-
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
 </script>
-<!-- /ABIL-SIMPLE-PATCH -->
+
+<!-- FAB Pozione (core lo crea l'handler) -->
+<div class="fab" id="btnUsePotion" title="Usa Pozione">🍵</div>
+
 </body>
 </html>
