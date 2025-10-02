@@ -1409,5 +1409,233 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 })();
 </script>
 <!-- /PATCH-01 -->
+  <!-- INV-SAFE-PATCH: DnD + Picker + Ability, senza observers -->
+<script>
+(function(){
+  const SLOT_IDS=[null,'slot1','slot2','slot3','slot4','slot5'];
+  const CAP_IDS =[null,'slotCap1','slotCap2','slotCap3','slotCap4','slotCap5'];
+  const $=s=>document.querySelector(s);
+  const $$=s=>Array.from(document.querySelectorAll(s));
+  function toast(msg){ try{ (window.statusEl||$('#status')).textContent='[SAFE] '+msg; }catch(e){} }
+
+  /* Picker minimale 1..5 */
+  function ensurePicker(){
+    if($('#safePicker')) return;
+    const w=document.createElement('section');
+    w.id='safePicker';
+    w.style.cssText='position:fixed;inset:0;display:none;place-items:center;z-index:2000;background:rgba(0,0,0,.4)';
+    w.innerHTML=`<div style="background:#0f172a;border:1px solid #1f2a44;border-radius:12px;padding:12px;width:320px;max-width:90vw;box-shadow:0 18px 44px rgba(0,0,0,.45)">
+      <div style="font-weight:700;margin-bottom:8px">Scegli slot</div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
+        ${[1,2,3,4,5].map(n=>`<button class="pickS" data-s="${n}" style="padding:10px;background:#1e40af;border:1px solid #31406e;color:#fff;border-radius:10px">${n}</button>`).join('')}
+      </div>
+      <div style="text-align:right;margin-top:10px">
+        <button id="safePickClose" style="padding:6px 10px;background:#26325a;border:1px solid #31406e;color:#fff;border-radius:8px">Annulla</button>
+      </div>
+    </div>`;
+    document.body.appendChild(w);
+    w.addEventListener('click',e=>{
+      const t=e.target;
+      if(t.id==='safePickClose') w.style.display='none';
+      if(t.classList.contains('pickS')){ const s=+t.dataset.s; const cb=window._safePickCb; window._safePickCb=null; w.style.display='none'; if(cb) cb(s); }
+    },false);
+  }
+  function openPicker(cb){ ensurePicker(); window._safePickCb=cb; $('#safePicker').style.display='grid'; }
+
+  /* Binding slot (dataset + icona) */
+  function setSlotBinding(slot, binding){ // {kind:'potion'|'item'|'ability', icon, itemId?, abId?, type?}
+    const el=document.getElementById(SLOT_IDS[slot]); const cap=document.getElementById(CAP_IDS[slot]);
+    if(!el||!cap) return;
+    el.dataset.kind=binding.kind||''; el.dataset.icon=binding.icon||'';
+    el.dataset.itemId=binding.itemId||''; el.dataset.abId=binding.abId||''; el.dataset.type=binding.type||'';
+    cap.textContent=binding.icon||'—';
+  }
+
+  /* Slot: abilita drop + tap UNA VOLTA */
+  function enableSlotsOnce(){
+    for(let s=1;s<=5;s++){
+      const el=document.getElementById(SLOT_IDS[s]); if(!el) continue;
+      if(!el._safeDrop){
+        el.addEventListener('dragover',e=>{ e.preventDefault(); },false);
+        el.addEventListener('drop',e=>{
+          e.preventDefault();
+          const data=e.dataTransfer.getData('text/plain')||'';
+          if(data.startsWith('ability:')){
+            const abId=(data.match(/ability:([^|]+)/)||[])[1];
+            const icon=decodeURIComponent((data.match(/icon:([^|]+)/)||[])[1]||'✨');
+            if(!abId) return;
+            setSlotBinding(s,{kind:'ability',icon,abId});
+            toast('Abilità -> slot '+s);
+            return;
+          }
+          if(data.startsWith('item:')){
+            const type=(data.match(/type:([^|]+)/)||[])[1];
+            const icon=decodeURIComponent((data.match(/icon:([^|]+)/)||[])[1]||'❖');
+            if(type!=='potion' && type!=='consumable'){ toast('Solo consumabili/pozioni in barra'); return; }
+            const id=(data.match(/item:([^|]+)/)||[])[1]||'';
+            setSlotBinding(s,{kind:(type==='potion'?'potion':'item'),icon,itemId:id,type});
+            toast('Oggetto -> slot '+s);
+          }
+        },false);
+        el._safeDrop=true;
+      }
+      if(!el._safeTap){
+        const handler=(e)=>{ e.preventDefault(); e.stopPropagation();
+          const kind=el.dataset.kind||'';
+          if(kind==='potion'){ $('#btnUsePotion')?.click(); return; }
+          if(kind==='item'){ toast('Consumabile in slot '+s+'. Se non ha effetto diretto, usalo dall’Inventario.'); return; }
+          if(kind==='ability'){ triggerAbility(el.dataset.abId); return; }
+        };
+        el.addEventListener('click', handler, true);
+        el.addEventListener('touchend', handler, {passive:false, capture:true});
+        el._safeTap=true;
+      }
+    }
+  }
+
+  /* Lancia abilità dallo slot: apri Abilità, clicca Lancia, richiudi */
+  function triggerAbility(abId){
+    if(!abId) return;
+    const wasHidden = $('#abilWin')?.classList.contains('hidden');
+    $('#btnAbilities')?.click();
+    setTimeout(()=>{
+      // Trova la card per nome/emoji -> genera id come fa la patch
+      const cards=$$('#abilGrid .abilItem');
+      const card = cards.find(c=>{
+        const cap=c.querySelector('.cap')?.textContent||'';
+        const id='ab_'+cap.toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'');
+        return id===abId;
+      }) || cards[0];
+      card?.querySelector('.btn')?.click();
+      if(wasHidden) $('#abilClose')?.click();
+    },50);
+  }
+
+  /* Inventario: aggiungi card Pozione e rendi consumabili/abilità trascinabili (UNA PASSATA per apertura) */
+  function patchInventoryOnce(){
+    const grid=$('#invGrid'); if(!grid) return;
+    // 1) Pozione
+    const cnt=$('#cntPot'); const qty=cnt ? (parseInt(cnt.textContent.trim(),10)||0) : 0;
+    let card=grid.querySelector('[data-safe="potion"]');
+    if(!card){
+      card=document.createElement('div');
+      card.className='invItem r-com';
+      card.setAttribute('data-safe','potion');
+      card.draggable=true;
+      card.innerHTML=`<div class="cap">🍵 Pozione ×<span class="qv">${qty}</span></div>
+                      <div class="row">
+                        <button class="act use">Usa</button>
+                        <button class="act tobar">→ Barra</button>
+                      </div>`;
+      // drag (desktop)
+      card.addEventListener('dragstart', e=>{
+        e.dataTransfer.setData('text/plain','item:__potion__|type:potion|icon:%F0%9F%8D%B5');
+        e.dataTransfer.setDragImage(new Image(),0,0);
+      },false);
+      // long-press (mobile) -> picker
+      (function(){
+        let tid=null;
+        card.addEventListener('touchstart',()=>{ tid=setTimeout(()=> openPicker(s=> setSlotBinding(s,{kind:'potion',icon:'🍵'})),450); },{passive:true});
+        card.addEventListener('touchend',()=>{ if(tid){clearTimeout(tid);tid=null;} },{passive:true});
+        card.addEventListener('touchmove',()=>{ if(tid){clearTimeout(tid);tid=null;} },{passive:true});
+      })();
+      // bottoni
+      card.querySelector('.use').addEventListener('click',()=>{
+        $('#btnUsePotion')?.click();
+        setTimeout(()=>{ const qv=card.querySelector('.qv'); if(qv&&cnt) qv.textContent = cnt.textContent.trim(); },60);
+      },false);
+      card.querySelector('.tobar').addEventListener('click',()=> openPicker(s=>{ setSlotBinding(s,{kind:'potion',icon:'🍵'}); toast('Pozione -> slot '+s); }), false);
+      grid.insertBefore(card, grid.firstChild);
+    } else {
+      const qv=card.querySelector('.qv'); if(qv) qv.textContent=qty;
+    }
+
+    // 2) Consumabili esistenti -> DnD + long-press
+    $$('#invGrid .invItem').forEach(c=>{
+      if(c.getAttribute('data-safe')==='potion') return;
+      if(c._safeDone) return;
+      const cap=c.querySelector('.cap'); const name=(cap?.textContent||'').toLowerCase();
+      const isConsum = name.includes('consum') || name.includes('pozione') || c.querySelector('.act');
+      // icona: prima emoji
+      let icon='❖'; const m=(cap?.textContent||'').trim().match(/^[^\w\s]/); if(m) icon=m[0];
+      const encIcon=encodeURIComponent(icon);
+      let pid=c.getAttribute('data-id'); if(!pid){ pid='__it__'+Math.random().toString(36).slice(2); c.setAttribute('data-id',pid); }
+      if(isConsum){
+        c.draggable=true;
+        c.addEventListener('dragstart', e=>{
+          e.dataTransfer.setData('text/plain',`item:${pid}|type:consumable|icon:${encIcon}`);
+          e.dataTransfer.setDragImage(new Image(),0,0);
+        },false);
+        (function(){
+          let tid=null;
+          c.addEventListener('touchstart',()=>{ tid=setTimeout(()=> openPicker(s=> setSlotBinding(s,{kind:'item',icon:icon,itemId:pid,type:'consumable'})),450); },{passive:true});
+          c.addEventListener('touchend',()=>{ if(tid){clearTimeout(tid);tid=null;} },{passive:true});
+          c.addEventListener('touchmove',()=>{ if(tid){clearTimeout(tid);tid=null;} },{passive:true});
+        })();
+      }
+      c._safeDone=true;
+    });
+
+    // 3) Abilità -> aggiungi “→ Barra” + DnD + long-press (se la finestra abilità è aperta)
+    const abilGrid=$('#abilGrid');
+    if(abilGrid){
+      $$('#abilGrid .abilItem').forEach(card=>{
+        if(card._safeAb) return;
+        const cap=card.querySelector('.cap'); let icon='✨'; if(cap){ const m=cap.textContent.trim().match(/^[^\w\s]/); if(m) icon=m[0]; }
+        const encIcon=encodeURIComponent(icon);
+        const name=(cap?.textContent||'abil').trim();
+        const abId='ab_'+name.toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'');
+
+        // bottone → Barra
+        const row=card.querySelector('.row');
+        if(row && !row.querySelector('.btnToBar')){
+          const btn=document.createElement('button');
+          btn.className='btn btnToBar'; btn.textContent='→ Barra';
+          btn.style.marginLeft='8px';
+          btn.addEventListener('click',()=> openPicker(s=>{ setSlotBinding(s,{kind:'ability',icon,abId}); toast('Abilità -> slot '+s); }), false);
+          row.appendChild(btn);
+        }
+
+        // DnD + long-press
+        card.draggable=true;
+        card.addEventListener('dragstart',e=>{
+          e.dataTransfer.setData('text/plain',`ability:${abId}|icon:${encIcon}`);
+          e.dataTransfer.setDragImage(new Image(),0,0);
+        },false);
+        (function(){
+          let tid=null;
+          card.addEventListener('touchstart',()=>{ tid=setTimeout(()=> openPicker(s=>{ setSlotBinding(s,{kind:'ability',icon,abId}); toast('Abilità -> slot '+s); }),450); },{passive:true});
+          card.addEventListener('touchend',()=>{ if(tid){clearTimeout(tid);tid=null;} },{passive:true});
+          card.addEventListener('touchmove',()=>{ if(tid){clearTimeout(tid);tid=null;} },{passive:true});
+        })();
+
+        card._safeAb=true;
+      });
+    }
+  }
+
+  /* Hook: quando apri Inventario/Abilità, applichiamo UNA passata e basta */
+  function init(){
+    ensurePicker();
+    enableSlotsOnce();
+
+    const invBtn=$('#btnInventory');
+    if(invBtn && !invBtn._safe){
+      invBtn.addEventListener('click', ()=> setTimeout(patchInventoryOnce, 40), false);
+      invBtn._safe=true;
+    }
+    const abBtn=$('#btnAbilities');
+    if(abBtn && !abBtn._safe){
+      abBtn.addEventListener('click', ()=> setTimeout(patchInventoryOnce, 40), false); // riusa la stessa routine per aggiungere “→ Barra”
+      abBtn._safe=true;
+    }
+
+    toast('Safe patch attiva');
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+<!-- /INV-SAFE-PATCH -->
 </body>
 </html>
