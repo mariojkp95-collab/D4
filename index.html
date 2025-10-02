@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Drakoria — HUD-2</title>
+<title>Drakoria — HUD-3</title>
 <style>
 :root{
   --bg:#0b1224; --panel:#0f172a; --stroke:#1f2a44; --text:#e5e7eb; --muted:#9ca3af;
@@ -24,7 +24,6 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 #btnUsePotion{ right:14px }
 #btnAttack{ right:82px }
 #btnLoot{ right:150px; display:none }
-#btnCast{ right:218px }
 #atkCdCanvas{ position:fixed; right:82px; bottom:14px; width:56px; height:56px; z-index:21; pointer-events:none }
 .err{position:fixed;left:50%;top:70px;transform:translateX(-50%);background:#7f1d1d;color:#fff;border:1px solid #fecaca;border-radius:8px;padding:8px 12px;z-index:50;font-weight:600;max-width:90vw;white-space:pre-wrap}
 
@@ -89,6 +88,18 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 .badge{font:700 11px system-ui;color:#93c5fd}
 .eqName{color:#e5e7eb;font-weight:600}
 
+/* Abilità (simil inventario) */
+.abil{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); width:480px; max-width:95vw;
+  background:#0f172a; border:1px solid #1f2a44; border-radius:12px; box-shadow:0 18px 44px rgba(0,0,0,.45); z-index:43}
+.abil-h{display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid #1f2a44;font-weight:700}
+.abil-x{width:32px;height:26px;border-radius:6px;border:1px solid #31406e;background:#26325a;color:#fff;cursor:pointer}
+.abil-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:10px}
+.abilItem{border:1px solid #2a355c;border-radius:10px;background:#0b1224;padding:10px;display:flex;flex-direction:column;gap:8px}
+.abilItem .cap{font-weight:700}
+.abilItem .desc{color:#c7cad1;font-size:12px}
+.abilItem .row{display:flex;justify-content:space-between;align-items:center}
+.abilItem .btn{background:#7c3aed}
+
 /* Target Frame */
 .tframe{position:fixed; left:50%; top:8px; transform:translateX(-50%); min-width:240px; max-width:80vw;
   background:rgba(15,23,42,.9); border:1px solid #1f2a44; border-radius:12px; padding:8px 10px; z-index:26; backdrop-filter: blur(3px); display:none}
@@ -99,8 +110,8 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 .thp>div{height:100%; width:0%; background:#ef4444}
 .thpTxt{font-size:12px; margin-top:4px; color:#e5e7eb}
 
-/* DPS panel */
-.dps{position:fixed; left:16px; top:16px; background:rgba(15,23,42,.9); border:1px solid #1f2a44; border-radius:10px; padding:8px 10px; z-index:26}
+/* DPS panel (spostato in alto a destra) */
+.dps{position:fixed; right:16px; top:16px; background:rgba(15,23,42,.9); border:1px solid #1f2a44; border-radius:10px; padding:8px 10px; z-index:26}
 .dps .h{font-weight:700; margin-bottom:4px}
 .dps .v{color:#e5e7eb}
 
@@ -130,6 +141,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   <div>
     <button id="btnQuest">Quest</button>
     <button id="btnMini">Mini-mappa</button>
+    <button id="btnAbilities">Abilità</button>
     <button id="btnInventory">Inventario</button>
     <button id="btnLog">Log</button>
     <button id="btnSave">Save</button>
@@ -141,14 +153,13 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 <main>
   <canvas id="game" width="960" height="576" aria-label="Gioco"></canvas>
   <p class="help">
-    Tap per muoverti • tap su un <b>nemico</b> per selezionarlo (Target Frame) • <b>doppio tap</b> per <b>auto-inseguire</b> •
-    <b>🗡️</b> / SPAZIO attacca • <b>✨</b> abilità con cast • Entra su un <b>sacco</b> per loot.
+    Tap per muoverti • tap su un <b>nemico</b> per selezionarlo (Target Frame) • <b>doppio tap</b> per auto-inseguire •
+    <b>🗡️</b> / SPAZIO attacca • Abilità da <b>Abilità</b> • Entra su un <b>sacco</b> per loot.
   </p>
   <div id="status"></div>
 </main>
 
 <!-- HUD buttons -->
-<button id="btnCast" class="fab" aria-label="Lancia abilità">✨</button>
 <button id="btnAttack" class="fab" aria-label="Attacca">🗡️</button>
 <canvas id="atkCdCanvas" width="56" height="56" aria-hidden="true"></canvas>
 <button id="btnUsePotion" class="fab" aria-label="Usa pozione">🍵</button>
@@ -177,6 +188,12 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   <div class="q-header"><span>Quest</span><button id="btnQuestClose" class="q-close" aria-label="Chiudi">×</button></div>
   <div id="questBody" class="q-body"></div>
 </aside>
+
+<!-- Abilità -->
+<section id="abilWin" class="abil hidden" role="dialog" aria-modal="true" aria-label="Abilità">
+  <div class="abil-h"><span>Abilità</span><button id="abilClose" class="abil-x">×</button></div>
+  <div id="abilGrid" class="abil-grid"></div>
+</section>
 
 <!-- Loot -->
 <section id="lootWin" class="loot hidden" role="dialog" aria-modal="true" aria-label="Bottino">
@@ -230,15 +247,15 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 <div id="errBox" class="err" style="display:none"></div>
 
 <script>
-/* ===== Drakoria — BUILD HUD-2 ===== */
+/* ===== Drakoria — BUILD HUD-3 ===== */
 (function(){
-  var BUILD='HUD-2';
+  var BUILD='HUD-3';
   var SAVE_KEY='save_xrq1_inv';
   var QUEST_KEY='quests_xrq1_inv';
 
   var cv=document.getElementById('game'); var ctx=cv.getContext('2d');
   var statusEl=document.getElementById('status');
-  var btnAttack=document.getElementById('btnAttack'), btnUsePotion=document.getElementById('btnUsePotion'), btnCast=document.getElementById('btnCast');
+  var btnAttack=document.getElementById('btnAttack'), btnUsePotion=document.getElementById('btnUsePotion');
   var btnSave=document.getElementById('btnSave'), btnLoad=document.getElementById('btnLoad'), btnReset=document.getElementById('btnReset');
   var btnQuest=document.getElementById('btnQuest'), btnQuestClose=document.getElementById('btnQuestClose');
   var questPanel=document.getElementById('questPanel'), questBody=document.getElementById('questBody');
@@ -251,20 +268,21 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
   var atkCdCanvas=document.getElementById('atkCdCanvas'), atkCdCtx=atkCdCanvas.getContext('2d');
   var lootWin=document.getElementById('lootWin'), lootBody=document.getElementById('lootBody'), lootClose=document.getElementById('lootClose'), lootTakeAll=document.getElementById('lootTakeAll');
   var btnLoot=document.getElementById('btnLoot');
+  var btnLog=document.getElementById('btnLog'), logPanel=document.getElementById('logPanel'), logBody=document.getElementById('logBody'), btnLogClose=document.getElementById('btnLogClose');
 
-  // Target Frame refs
+  // Abilità UI
+  var btnAbilities=document.getElementById('btnAbilities'), abilWin=document.getElementById('abilWin'), abilGrid=document.getElementById('abilGrid'), abilClose=document.getElementById('abilClose');
+
+  // Target Frame
   var tframe=document.getElementById('tframe'), tfName=document.getElementById('tfName'), tfKind=document.getElementById('tfKind');
   var tfHpBar=document.getElementById('tfHpBar'), tfHpTxt=document.getElementById('tfHpTxt'), tfDist=document.getElementById('tfDist');
 
-  // DPS refs
+  // DPS
   var dpsText=document.getElementById('dpsText');
   var dpsEvents=[], dpsPeak=0;
 
   // Cast UI
   var castWrap=document.getElementById('castWrap'), castName=document.getElementById('castName'), castTime=document.getElementById('castTime'), castBar=document.getElementById('castBar');
-
-  // Log UI
-  var btnLog=document.getElementById('btnLog'), logPanel=document.getElementById('logPanel'), logBody=document.getElementById('logBody'), btnLogClose=document.getElementById('btnLogClose');
 
   function panic(where, e){
     errBox.style.display='block';
@@ -278,6 +296,14 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
     // Inventario & equip
     var inventory=[]; var equipped={weapon:null, armor:null};
+
+    // Abilità (collezionabili)
+    var abilities = [
+      { id:'arc_wave', name:'Ondata Arcana', icon:'✨', desc:'Colpisce ad area le 8 caselle adiacenti. Cast 1.5s, CD 6s.', castMs:1500, cdMs:6000,
+        use: function(){ castAbility(this, aoeArcWave); } }
+    ];
+    var lastCast = {}; // id -> ts
+    var isCasting=false, castStart=0, currentCasting=null;
 
     // --- MAPPA
     var COLS=15, ROWS=9, TILE=64;
@@ -377,6 +403,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       renderQuest();
     }
     function claimQuest(){ var q=quests[currentQuest]; if(!q||q.status!=='completed') return; var rw=q.reward||{}; if(rw.xp) gainXP(rw.xp); if(rw.pots) player.pots += rw.pots; q.status='claimed'; toast('Ricompensa ottenuta.'); logLoot('Ricompensa: +'+(rw.xp||0)+' XP'+(rw.pots?(', +'+rw.pots+' poz.'):'')); renderQuest(); updateHotbarCounts(); }
+
     document.getElementById('btnQuest').addEventListener('click', function(){ questPanel.classList.toggle('hidden'); }, false);
     btnQuestClose.addEventListener('click', function(){ questPanel.classList.add('hidden'); }, false);
     renderQuest();
@@ -457,9 +484,8 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     function inRect(px,py,r){ return px>=r.x&&px<=r.x+r.w&&py>=r.y&&py<=r.y+r.h; }
 
     cv.addEventListener('click',function(ev){
-      // Spostarsi con tap (interrompe cast)
-      if(isCasting) cancelCast('Mossa durante il cast');
-      var m = canvasToTile(ev), now=performance.now(), cd=(now-player.lastAtk)>=player.atkCd;
+      if(isCasting) cancelCast('Mossa durante il cast'); // muoversi interrompe
+      var m = canvasToTile(ev), now=performance.now();
 
       var i, clickedEnemy=null;
       for(i=0;i<enemies.length;i++){ var ee=enemies[i]; if(inRect(m.sx,m.sy,enemyRect(ee))){ clickedEnemy=ee; break; } }
@@ -477,7 +503,8 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       autoChase = false;
       var p=bfs(player.x,player.y,m.tx,m.ty); if(p && p.length) pathQueue=p;
 
-      if(target && chebyshev(player,target)===1 && cd){ attackEnemy(target); return; }
+      // attacco opportunistico
+      if(target && chebyshev(player,target)===1 && (now-player.lastAtk)>=player.atkCd){ attackEnemy(target); return; }
     }, false);
 
     cv.addEventListener('pointerdown',function(){
@@ -506,11 +533,15 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       drawMini();
     }, false);
 
+    // Inventario: binding
     btnInventory.onclick = function(){ invWin.classList.toggle('hidden'); renderInventory(); };
     invClose.onclick = function(){ invWin.classList.add('hidden'); };
-
     btnUnequipWeapon.addEventListener('click', function(){ unequip('weapon'); }, false);
     btnUnequipArmor .addEventListener('click', function(){ unequip('armor');  }, false);
+
+    // Abilità: binding
+    btnAbilities.onclick = function(){ abilWin.classList.toggle('hidden'); renderAbilities(); };
+    abilClose.onclick = function(){ abilWin.classList.add('hidden'); };
 
     // Log toggle
     btnLog.addEventListener('click', function(){ logPanel.classList.toggle('hidden'); }, false);
@@ -551,7 +582,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
       if(t.hp===0){
         if(target===t){ target=null; autoChase=false; hideTargetFrame(); }
-        spawnLootBag(t.x,t.y, t.kind||t.type);
+        trySpawnLootBag(t.x,t.y, t.kind||t.type);
         gainXP(t.type==='ranged'?25:20);
         logSys(nameOf(t)+' è stato sconfitto.');
         enemies.splice(enemies.indexOf(t),1);
@@ -586,27 +617,26 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     // ===== LOOT & ITEMS =====
     var BAG_TTL_MS = 90000, BAG_WARN_MS = 10000;
 
-    function spawnLootBag(x,y,kind){
+    function trySpawnLootBag(x,y,kind){
       var items=[];
-      items.push(makeItem('Monete', '🪙', 'common', 'coin', rndInt(1,3)));
+      // drop comuni
+      if(Math.random()<0.85) items.push(makeItem('Monete', '🪙', 'common', 'coin', rndInt(1,3)));
       if(Math.random()<0.35) items.push(makeItem('Pozione', '🍵', 'common', 'potion', 1));
-
+      // drop per tipo
       if(kind==='slime' || kind==='melee'){
         if(Math.random()<0.28) items.push(makeItem('Gelatina', '🟢', 'uncommon', 'slime_gel', 1));
         if(Math.random()<0.18) items.push(makeWeapon('Pugnale Rozzo','🗡️','uncommon',2));
         if(Math.random()<0.10) items.push(makeArmor('Fascia di Stoffa','🛡️','uncommon',8));
         if(Math.random()<0.05) items.push(makeWeapon('Lama Viscosa','💚','rare',4));
-      } else if(kind==='archer' || kind==='ranged'){
+      } else {
         if(Math.random()<0.22) items.push(makeWeapon('Arco Leggero','🏹','uncommon',3));
         if(Math.random()<0.14) items.push(makeArmor('Cappuccio di Cuoio','🧢','uncommon',12));
         if(Math.random()<0.08) items.push(makeWeapon('Arco del Falco','🦅','rare',5));
         if(Math.random()<0.04) items.push(makeArmor('Mantello del Cacciatore','🧥','rare',20));
-      } else {
-        if(Math.random()<0.15) items.push(makeWeapon('Spada Grezza','🗡️','uncommon',2));
-        if(Math.random()<0.10) items.push(makeArmor('Giubba di Cuoio','🛡️','uncommon',10));
       }
       if(Math.random()<0.01) items.push(makeWeapon('Lama Leggendaria','⚡','legend',9));
 
+      if(items.length===0) return; // <<< niente sprite se vuota
       lootBags.push({x:x,y:y,items:items, createdAt:performance.now(), ttlMs:BAG_TTL_MS});
     }
     function makeItem(name, icon, rarity, type, qty){ return {id: nextItemId++, name, icon, rarity, type, qty:qty||1}; }
@@ -765,36 +795,56 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       inventory.push(equipped[slot]); equipped[slot]=null; recomputeStats(false); renderInventory(); draw(); toast('Rimosso equip.');
     }
 
-    // ===== CASTING / ABILITÀ =====
-    var isCasting=false, castStart=0, castDuration=1500, castNameStr='Ondata Arcana', lastCast= -1e9, castCd=6000;
-    btnCast.addEventListener('click', function(){
-      var now=performance.now();
-      if(isCasting) { cancelCast('Annullato'); return; }
-      if(now-lastCast<castCd){ toast('Abilità in ricarica'); logSys('Abilità in ricarica.'); return; }
-      startCast();
-    }, false);
-
-    function startCast(){
-      isCasting=true; castStart=performance.now();
-      castWrap.style.display='block'; castName.textContent=castNameStr;
-      castTime.textContent=(castDuration/1000).toFixed(1)+'s';
-      castBar.style.width='0%';
-      toast('Lanci '+castNameStr+'...'); logSys('Casting: '+castNameStr);
-      autoChase=false; pathQueue=[]; // stai fermo
+    // ===== ABILITÀ =====
+    function renderAbilities(){
+      abilGrid.innerHTML='';
+      for(var i=0;i<abilities.length;i++){
+        (function(ab){
+          var wrap=document.createElement('div'); wrap.className='abilItem';
+          var cdLeft = getAbilityCooldownLeft(ab);
+          wrap.innerHTML =
+            '<div class="cap">'+ab.icon+' '+ab.name+'</div>'+
+            '<div class="desc">'+ab.desc+'</div>'+
+            '<div class="row"><span>'+ (cdLeft>0?('CD: '+(cdLeft/1000).toFixed(1)+'s'):'Pronta') +'</span>'+
+            '<button class="btn">Lancia</button></div>';
+          var btn=wrap.querySelector('.btn');
+          btn.disabled = cdLeft>0 || isCasting;
+          btn.onclick=function(){ ab.use(); renderAbilities(); };
+          abilGrid.appendChild(wrap);
+        })(abilities[i]);
+      }
+    }
+    function getAbilityCooldownLeft(ab){
+      var last=lastCast[ab.id]||-1e12, now=performance.now();
+      var left = (last+ab.cdMs) - now; return left>0?left:0;
+    }
+    function castAbility(ab, onFinish){
+      if(isCasting) return;
+      var left=getAbilityCooldownLeft(ab); if(left>0){ toast('Abilità in ricarica'); logSys('Abilità '+ab.name+' in ricarica.'); return; }
+      isCasting=true; castStart=performance.now(); currentCasting={ab:ab, onFinish:onFinish};
+      castWrap.style.display='block'; castName.textContent=ab.name; castTime.textContent=(ab.castMs/1000).toFixed(1)+'s'; castBar.style.width='0%';
+      toast('Lanci '+ab.name+'...'); logSys('Casting: '+ab.name);
+      autoChase=false; pathQueue=[];
     }
     function cancelCast(reason){
       if(!isCasting) return;
-      isCasting=false; castWrap.style.display='none';
+      isCasting=false; castWrap.style.display='none'; currentCasting=null;
       toast('Cast interrotto'); logSys('Cast interrotto: '+reason);
     }
     function finishCast(){
+      if(!isCasting || !currentCasting) return;
       isCasting=false; castWrap.style.display='none';
-      lastCast=performance.now();
-      // Effetto: AoE raggio 1 (8 caselle intorno + stessa casella esclusa)
+      lastCast[currentCasting.ab.id]=performance.now();
+      currentCasting.onFinish();
+      currentCasting=null;
+      renderAbilities();
+    }
+    function aoeArcWave(){
+      // Effetto: AoE raggio 1
       var total=0, hits=0;
       for(var i=enemies.length-1;i>=0;i--){
         var e=enemies[i]; var dx=Math.abs(e.x-player.x), dy=Math.abs(e.y-player.y);
-        if((dx+dy===1) || (dx===1 && dy===1)){ // adiacenti anche diagonali
+        if((dx+dy===1) || (dx===1 && dy===1)){
           var dmg=rndInt(10,16)+Math.floor(player.atkMin/2);
           e.hp=Math.max(0,e.hp-dmg);
           addDmgText(e.x,e.y,'AOE '+dmg,'#60a5fa');
@@ -803,7 +853,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
           e.aggro=true; e.lastSeenTs=performance.now();
           if(e.hp===0){
             if(target===e){ target=null; autoChase=false; hideTargetFrame(); }
-            spawnLootBag(e.x,e.y, e.kind||e.type);
+            trySpawnLootBag(e.x,e.y, e.kind||e.type);
             gainXP(e.type==='ranged'?25:20);
             enemies.splice(i,1);
           }
@@ -823,7 +873,8 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
         });
         localStorage.setItem(SAVE_KEY, JSON.stringify({
           map:map, player:player, enemies:enemies, coins:coins, potions:potions, projectiles:projectiles,
-          lootBags:bags, nextItemId:nextItemId, inventory:inventory, equipped:equipped
+          lootBags:bags, nextItemId:nextItemId, inventory:inventory, equipped:equipped,
+          lastCast:lastCast
         }));
         localStorage.setItem(QUEST_KEY, JSON.stringify({currentQuest:currentQuest,quests:quests}));
         toast('Salvato.');
@@ -849,27 +900,28 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
       nextItemId = d && d.nextItemId ? (d.nextItemId|0) : nextItemId;
       inventory = Array.isArray(d.inventory) ? d.inventory : [];
       equipped = d && d.equipped ? d.equipped : {weapon:null, armor:null};
+      lastCast = d && d.lastCast ? d.lastCast : {};
       recomputeStats(false);
       var qd = localStorage.getItem(QUEST_KEY); if(qd){ var qj=JSON.parse(qd); if(qj){ currentQuest=qj.currentQuest||0; if(qj.quests&&qj.quests.length){ quests[0].progress=qj.quests[0].progress||0; quests[0].status=qj.quests[0].status||'active'; } } }
-      renderQuest(); updateHotbarCounts(); draw(); drawMini(); renderInventoryIfOpen(); updateTargetFrame(); updateDpsPanel();
+      renderQuest(); updateHotbarCounts(); draw(); drawMini(); renderInventoryIfOpen(); updateTargetFrame(); updateDpsPanel(); renderAbilities();
       toast('Caricato.');
     }catch(e){ panic('load',e); } }, false);
 
     btnReset.addEventListener('click', function(){ location.reload(); }, false);
 
     // LOOP
-    function isAdjacent(ax,ay,bx,by){ return Math.abs(ax-bx)<=1 && Math.abs(ay-by)<=1; } // magnet
+    function isAdjacent(ax,ay,bx,by){ return Math.abs(ax-bx)<=1 && Math.abs(ay-by)<=1; }
 
     function step(){
       try{
         // Casting progression
-        if(isCasting){
+        if(isCasting && currentCasting){
           var now=performance.now();
-          var elapsed=now-castStart;
-          var ratio=Math.max(0,Math.min(1,elapsed/castDuration));
+          var elapsed=now-castStart, need=currentCasting.ab.castMs;
+          var ratio=Math.max(0,Math.min(1,elapsed/need));
           castBar.style.width=(ratio*100)+'%';
-          castTime.textContent=((castDuration-elapsed)/1000).toFixed(1)+'s';
-          if(elapsed>=castDuration) finishCast();
+          castTime.textContent=((need-elapsed)/1000).toFixed(1)+'s';
+          if(elapsed>=need) finishCast();
         }
 
         if(autoChase && target && !isCasting){
@@ -1021,7 +1073,7 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
     }
 
     setInterval(step,120);
-    draw(); drawAtkCooldown(); drawMini(); updateHotbarCounts(); updateTargetFrame(); updateDpsPanel();
+    draw(); drawAtkCooldown(); drawMini(); updateHotbarCounts(); updateTargetFrame(); updateDpsPanel(); renderAbilities();
 
     // DRAW
     function draw(){
@@ -1174,9 +1226,11 @@ main{max-width:1000px;margin:14px auto;padding:12px;background:var(--panel);bord
 
   }catch(e){ panic('boot', e); }
 
-  /* ====== Fine try/catch; funzioni globali fuori per essere visibili ====== */
+  // ===== loop =====
+  setInterval(step,120);
 
-  // At the very end nothing else
+  // expose niente
+
 })();
 </script>
 </body>
