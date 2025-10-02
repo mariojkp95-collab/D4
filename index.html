@@ -399,7 +399,6 @@ var WORLD = {
 
 // ricostruisce la mappa e (se serve) svuota/spawna elementi
 function buildMap(name){
-// mappa iniziale = main
   WORLD.current = name;
 
   // 1) palette visiva per distinguere le mappe (senza cambiare il tuo draw)
@@ -470,12 +469,13 @@ function checkPortalAndTeleport(){
   logSys('Teletrasporto: ' + (WORLD.current==='spawn'?'Spawn':'Main'));
   draw(); drawMini();
 }
+// inizializza la mappa iniziale
+buildMap('main');
     // OGGETTI + PROIETTILI
     var coins=[], potions=[], projectiles=[];
     for(var i1=0;i1<4;i1++) coins.push(randEmpty());
     for(var i2=0;i2<1;i2++) potions.push(randEmpty());
-    // inizializza la mappa iniziale
-buildMap('main');
+    
 
     // TARGET LOCK + AUTO-CHASE
     var target=null, autoChase=false, lastEnemyTapTs=0, lastEnemyTapId=-1;
