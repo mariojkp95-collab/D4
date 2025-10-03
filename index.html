@@ -357,6 +357,7 @@ window.addEventListener('resize', layoutHud, false);
   try{
     // ===== Dati runtime =====
     var lootBags=[]; var nextItemId=1;
+    var dead = false;
     var lootSuppress = { id:null, until:0 };
 function bagKey(b){ return b.x+','+b.y; }
     var teleportGuardUntil = 0; // protezione anti-teletrasporto immediato
@@ -413,7 +414,7 @@ var lastPlayerX = player.x, lastPlayerY = player.y;
         aggro:false, aggroRange:5, leashRange:15, loseAggroMs:6000, lastSeenTs:0,
         moveTick:0, moveEvery:6, path:[], mode:'idle'
       });
-      var dead = false;
+      
     }
     
     
@@ -736,7 +737,7 @@ function tileFree(x,y){
     const m = canvasToTile(ev);
     
     // Click HUD in-canvas
-if(inRect(m.sx, m.sy, HUD.atk))  { tryAttackAdjacent(); return; }
+if(inRect(m.sx, m.sy, HUD.loot)) { openLootIfOnBag(); return; }
 if(inRect(m.sx, m.sy, HUD.pot))  { usePotion(); return; }
 if(inRect(m.sx, m.sy, HUD.loot)) { btnLoot.click(); return; }
 
@@ -907,6 +908,7 @@ cv.addEventListener('click', onCanvasTap, false);
   cv.style.filter = 'grayscale(1)';
   cv.style.opacity = '0.6';
 }
+}
   
 
     function usePotion(){
@@ -1012,10 +1014,47 @@ function takeItem(bag,itemId){
   draw(); drawMini(); updateHotbarCounts();
 }
 
-// Bottone “👜”
-btnLoot.addEventListener('click', function(){
-  var bag=getBagAt(player.x,player.y);
+// --- Loot: apertura programmatica, indipendente dal bottone nascosto
+function openLootIfOnBag(){
+  var bag = getBagAt(player.x, player.y);
   if(!bag){ btnLoot.style.display='none'; return; }
+
+  var key = bagKey(bag);
+  if(lootSuppress.id===key && performance.now()<lootSuppress.until){
+    btnLoot.style.display='block';
+    return;
+  }
+
+  // Se contiene solo comuni → autopick
+  var commonOnly = true;
+  for (var i=0;i<bag.items.length;i++){
+    var t = bag.items[i].type;
+    if(t!=='coin' && t!=='potion'){ commonOnly=false; break; }
+  }
+  if(commonOnly){
+    var beforeCoins=player.coins, beforePots=player.pots;
+    var emptied=autoPickupCommons(bag);
+    var coinsGained=player.coins-beforeCoins, potsGained=player.pots-beforePots;
+
+    if(emptied){ lootBags.splice(lootBags.indexOf(bag),1); btnLoot.style.display='none'; }
+    else{ renderLoot(bag); lootWin.classList.remove('hidden'); }
+
+    updateHotbarCounts(); draw(); drawMini();
+    if(coinsGained||potsGained){
+      toast('Raccolto: '+(coinsGained?('🪙 x'+coinsGained+' '):'')+(potsGained?('🍵 x'+potsGained):''));
+      if(coinsGained) logLoot('Monete +'+coinsGained);
+      if(potsGained)  logLoot('Pozioni +'+potsGained);
+    }
+    return;
+  }
+
+  // Altrimenti apri la finestra
+  renderLoot(bag);
+  lootWin.classList.remove('hidden');
+}
+
+// Bottone “👜”
+btnLoot.addEventListener('click', openLootIfOnBag, false);
 
   var key = bagKey(bag);
   // se l’utente ha appena chiuso, non riapri in auto
@@ -1327,6 +1366,7 @@ if (d && d.world) {
     dead = false;
 cv.style.filter = '';
 cv.style.opacity = '';
+cv.style.pointerEvents = 'auto';
 
     btnReset.addEventListener('click', function(){ location.reload(); }, false);
 
@@ -1479,13 +1519,6 @@ lastPlayerY = player.y;
       }
     }
 
-    // === Loot (SOLO toggle del pulsante) ===
-    var onBag = !!getBagAt(player.x, player.y);
-    if(!onBag) {
-      btnLoot.style.display = 'none';
-    } else {
-      btnLoot.style.display = 'block';
-    }
 
   }catch(e){ panic('step', e); }
 }
