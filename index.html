@@ -1816,7 +1816,11 @@ function updateDpsPanel(){
     function logHeal(msg){ pushLog(escapeHtml(msg), 'heal'); }
     function logLoot(msg){ pushLog(escapeHtml(msg), 'loot'); }
     function logSys(msg){ pushLog(escapeHtml(msg), 'sys'); }
-    function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
+    function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, function(m){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]);
+  });
+}
 
   }catch(e){ panic('boot', e); }
 
