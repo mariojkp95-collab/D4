@@ -1671,7 +1671,6 @@ function drawTargetRing(tx,ty){
     function updateHotbarCounts(){ potCntEl.textContent = String(player.pots||0); }
     function toast(msg){ statusEl.textContent='['+BUILD+'] '+msg; }
 
--   Target Frame & DPS UI =====
 +   // ===== Target Frame & DPS UI =====
     function capFirst(s){ return s ? s.charAt(0).toUpperCase()+s.slice(1) : ''; }
     function nameOf(t){ return t && (t.kind ? capFirst(t.kind) : (t.type==='ranged'?'Arciere':'Mostro')); }
