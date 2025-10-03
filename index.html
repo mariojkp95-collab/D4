@@ -2,7 +2,9 @@
 <html lang="it">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+
 <title>Drakoria — HUD-5</title>
+
 <style>
 :root{
   --bg:#0b1224; --panel:#0f172a; --stroke:#1f2a44; --text:#e5e7eb; --muted:#9ca3af;
@@ -154,6 +156,14 @@ main{
 .pickBtn{padding:10px; background:#1e40af; border:1px solid #31406e; color:#fff; border-radius:10px; cursor:pointer}
 /* === PATCH: HUD in-canvas → nascondo i FAB esterni === */
 #btnAttack, #btnUsePotion, #btnLoot, #atkCdCanvas { display:none !important; }
+
+/* Game Over overlay */
+.death{position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.45); z-index:60}
+.death.hidden{display:none}
+.death-box{background:#0f172a; border:1px solid #1f2a44; padding:14px; border-radius:12px; width:min(420px,92vw); box-shadow:0 18px 44px rgba(0,0,0,.55)}
+.death-title{font-weight:800; font-size:18px; margin-bottom:8px}
+.death-sub{color:#cbd5e1; margin-bottom:12px}
+.death-actions{display:flex; gap:8px; justify-content:flex-end}
 
 /* === PATCH: contenitore più largo (stile NosTale) === */
 main{ max-width:1400px; } /* oppure: max-width:min(95vw,1600px); */
@@ -324,6 +334,29 @@ window.addEventListener('resize', layoutHud, false);
   var lootWin=document.getElementById('lootWin'), lootBody=document.getElementById('lootBody'), lootClose=document.getElementById('lootClose'), lootTakeAll=document.getElementById('lootTakeAll');
   var btnLoot=document.getElementById('btnLoot');
   var btnLog=document.getElementById('btnLog'), logPanel=document.getElementById('logPanel'), logBody=document.getElementById('logBody'), btnLogClose=document.getElementById('btnLogClose');
+  
+  // === GAME OVER OVERLAY (agganci sicuri anche se l'HTML sta a fine <body>) ===
+var deathOverlay=null, deathLoad=null, deathReset=null;
+
+// funzione che (ri)aggancia i bottoni se/quando esistono nel DOM
+function wireDeathOverlay(){
+  deathOverlay = document.getElementById('deathOverlay');
+  deathLoad    = document.getElementById('deathLoad');
+  deathReset   = document.getElementById('deathReset');
+
+  if (deathLoad && !deathLoad.__wired){
+    deathLoad.addEventListener('click', function(){ btnLoad.click(); }, false);
+    deathLoad.__wired = true;
+  }
+  if (deathReset && !deathReset.__wired){
+    deathReset.addEventListener('click', function(){ btnReset.click(); }, false);
+    deathReset.__wired = true;
+  }
+}
+
+// prova subito (nel caso l'overlay sia già nel DOM) e poi riprova a DOMContentLoaded
+wireDeathOverlay();
+document.addEventListener('DOMContentLoaded', wireDeathOverlay, false);
 
   // Abilità UI
   var btnAbilities=document.getElementById('btnAbilities'), abilWin=document.getElementById('abilWin'), abilGrid=document.getElementById('abilGrid'), abilClose=document.getElementById('abilClose');
@@ -793,6 +826,14 @@ if (inRect(m.sx, m.sy, HUD.loot)) { openLootIfOnBag(); return; }
     if(target && chebyshev(player,target)===1 && (now-player.lastAtk)>=player.atkCd){
       attackEnemy(target); return;
     }
+        // --- RENDER (refresh ogni tick) ---
+    updateDmgTexts();
+    draw();
+    drawAtkCooldown();
+    drawMini();
+    updateTargetFrame();
+    updateDpsPanel();
+    
   }catch(e){ panic('input', e); }
 }
 
@@ -895,21 +936,24 @@ cv.addEventListener('click', onCanvasTap, false);
   logDmg('Subisci ' + amount + ' danni.');
   if (isCasting) cancelCast('Interrotto dal danno');
   if (player.hp === 0) gameOver();
-  
-  function gameOver(){
-  dead = true;
-  autoChase = false;
-  pathQueue = [];
-  target = null;
-  hideTargetFrame?.();
 
-  // Disattivo solo la grafica del canvas (niente overlay!)
-  toast('Sei morto! Premi "Load" o "Reset" in alto.');
-  cv.style.filter = 'grayscale(1)';
-  cv.style.opacity = '0.6';
-}
-}
-  
+  function gameOver(){
+    dead = true;
+    autoChase = false;
+    pathQueue = [];
+    target = null;
+    hideTargetFrame?.();
+
+    // Effetto visivo sul canvas
+    toast('Sei morto!');
+    cv.style.filter = 'grayscale(1)';
+    cv.style.opacity = '0.6';
+
+    // Mostra overlay e assicura gli agganci (se l'HTML è in fondo al body)
+    if (typeof wireDeathOverlay === 'function') wireDeathOverlay();
+    if (deathOverlay) deathOverlay.classList.remove('hidden');
+  }
+}  
 
     function usePotion(){
       if(player.pots<=0||player.hp>=player.maxHp) return;
@@ -1175,41 +1219,81 @@ function autoPickupCommons(bag){
 }, false);
 
     btnLoad.addEventListener('click', function(){ try{
-      var raw=localStorage.getItem(SAVE_KEY); if(!raw) return alert('Nessun salvataggio.');
-      var d=JSON.parse(raw), i,y,x;
-      if(d && d.map && d.map.length===ROWS){ for(y=0;y<ROWS;y++){ for(x=0;x<COLS;x++){ map[y][x]=d.map[y][x]|0; } } }
-      if(d && d.player){ for(var k in d.player){ if(d.player.hasOwnProperty(k)) player[k]=d.player[k]; } }
-      enemies.length=0; if(d && d.enemies){ for(i=0;i<d.enemies.length;i++) enemies.push(d.enemies[i]); }
-      coins.length=0; if(d && d.coins){ for(i=0;i<d.coins.length;i++) coins.push(d.coins[i]); }
-      potions.length=0; if(d && d.potions){ for(i=0;i<d.potions.length;i++) potions.push(d.potions[i]); }
-      projectiles.length=0; if(d && d.projectiles){ for(i=0;i<d.projectiles.length;i++) projectiles.push(d.projectiles[i]); }
-      lootBags.length=0;
-      if(d && Array.isArray(d.lootBags)){
-        for(i=0;i<d.lootBags.length;i++){
-          var src=d.lootBags[i];
-          lootBags.push({ x:src.x, y:src.y, items:src.items||[], createdAt:performance.now(), ttlMs:Math.max(0, src.ttlRemain||0) });
-        }
+  var raw=localStorage.getItem(SAVE_KEY); if(!raw) return alert('Nessun salvataggio.');
+  var d=JSON.parse(raw), i,y,x;
+
+  if(d && d.map && d.map.length===ROWS){ for(y=0;y<ROWS;y++){ for(x=0;x<COLS;x++){ map[y][x]=d.map[y][x]|0; } } }
+  if(d && d.player){ for(var k in d.player){ if(d.player.hasOwnProperty(k)) player[k]=d.player[k]; } }
+
+  enemies.length=0; if(d && d.enemies){ for(i=0;i<d.enemies.length;i++) enemies.push(d.enemies[i]); }
+  coins.length=0;   if(d && d.coins){   for(i=0;i<d.coins.length;i++)   coins.push(d.coins[i]); }
+  potions.length=0; if(d && d.potions){ for(i=0;i<d.potions.length;i++) potions.push(d.potions[i]); }
+  projectiles.length=0; if(d && d.projectiles){ for(i=0;i<d.projectiles.length;i++) projectiles.push(d.projectiles[i]); }
+
+  lootBags.length=0;
+  if(d && Array.isArray(d.lootBags)){
+    for(i=0;i<d.lootBags.length;i++){
+      var src=d.lootBags[i];
+      lootBags.push({ x:src.x, y:src.y, items:src.items||[], createdAt:performance.now(), ttlMs:Math.max(0, src.ttlRemain||0) });
+    }
+  }
+
+  nextItemId = d && d.nextItemId ? (d.nextItemId|0) : nextItemId;
+  inventory  = Array.isArray(d.inventory) ? d.inventory : [];
+  equipped   = d && d.equipped ? d.equipped : {weapon:null, armor:null};
+  lastCast   = d && d.lastCast ? d.lastCast : {};
+
+  if(d && d.hotbar){
+    hotbar = d.hotbar;
+    for(var s=1;s<=5;s++){ capEls[s].textContent = hotbar[s] ? (hotbar[s].icon||'—') : '—'; }
+  }
+
+  // Mondo + tema
+  if (d && d.world) {
+    WORLD.current = d.world;
+    applyTheme(WORLD.current==='main' ? THEMES.main : THEMES.spawn);
+  }
+
+  recomputeStats(false);
+
+  // Quest
+  var qd = localStorage.getItem(QUEST_KEY);
+  if(qd){
+    var qj=JSON.parse(qd);
+    if(qj){
+      currentQuest=qj.currentQuest||0;
+      if(qj.quests&&qj.quests.length){
+        quests[0].progress=qj.quests[0].progress||0;
+        quests[0].status=qj.quests[0].status||'active';
       }
-      nextItemId = d && d.nextItemId ? (d.nextItemId|0) : nextItemId;
-      inventory = Array.isArray(d.inventory) ? d.inventory : [];
-      equipped = d && d.equipped ? d.equipped : {weapon:null, armor:null};
-      lastCast = d && d.lastCast ? d.lastCast : {};
-      if(d && d.hotbar){ hotbar=d.hotbar; for(var s=1;s<=5;s++){ capEls[s].textContent = hotbar[s] ? (hotbar[s].icon||'—') : '—'; } }
-      // Ripristina mondo e tema se salvati
-if (d && d.world) {
-  WORLD.current = d.world;
-  applyTheme(WORLD.current==='main' ? THEMES.main : THEMES.spawn);
-}
-      recomputeStats(false);
-      var qd = localStorage.getItem(QUEST_KEY); if(qd){ var qj=JSON.parse(qd); if(qj){ currentQuest=qj.currentQuest||0; if(qj.quests&&qj.quests.length){ quests[0].progress=qj.quests[0].progress||0; quests[0].status=qj.quests[0].status||'active'; } } }
-      renderQuest(); updateHotbarCounts(); draw(); drawMini(); renderInventoryIfOpen(); updateTargetFrame(); updateDpsPanel(); renderAbilities();
-      toast('Caricato.');
-    }catch(e){ panic('load',e); } }, false);
-    
-    dead = false;
-cv.style.filter = '';
-cv.style.opacity = '';
-cv.style.pointerEvents = 'auto';
+    }
+  }
+
+  renderQuest();
+  updateHotbarCounts();
+
+  // Refresh completo
+  draw(); 
+  drawMini();
+
+  // Se per qualche motivo la funzione non esiste, evita l'errore
+  if (typeof renderInventoryIfOpen === 'function') {
+    renderInventoryIfOpen();
+  }
+
+  updateTargetFrame();
+  updateDpsPanel();
+  renderAbilities();
+
+  // Uscita da stato “morto” + chiudi overlay
+  dead = false;
+  cv.style.filter = '';
+  cv.style.opacity = '';
+  cv.style.pointerEvents = 'auto';
+  deathOverlay?.classList.add('hidden');
+
+  toast('Caricato.');
+}catch(e){ panic('load',e); } }, false);
 
     btnReset.addEventListener('click', function(){ location.reload(); }, false);
 
@@ -1808,5 +1892,15 @@ function roundRect(ctx, x, y, w, h, r){
 })();
 </script>
 <!-- /PATCH-ABIL-UX v5 -->
+<div id="deathOverlay" class="death hidden" role="dialog" aria-modal="true" aria-label="Game Over">
+  <div class="death-box">
+    <div class="death-title">Sei morto</div>
+    <div class="death-sub">Usa <b>Load</b> per riprendere dall'ultimo salvataggio oppure <b>Reset</b> per ricominciare.</div>
+    <div class="death-actions">
+      <button id="deathLoad" class="btn">Load</button>
+      <button id="deathReset" class="btn">Reset</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
