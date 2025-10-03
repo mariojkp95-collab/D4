@@ -1092,7 +1092,7 @@ cv.addEventListener('click', onCanvasTap, false);
     autoChase = false;
     pathQueue = [];
     target = null;
-    hideTargetFrame?.();
+    if (typeof hideTargetFrame === 'function') hideTargetFrame();
 
     // Effetto visivo sul canvas
     toast('Sei morto!');
@@ -1440,7 +1440,7 @@ function autoPickupCommons(bag){
   cv.style.filter = '';
   cv.style.opacity = '';
   cv.style.pointerEvents = 'auto';
-  deathOverlay?.classList.add('hidden');
+  if (deathOverlay && deathOverlay.classList) { deathOverlay.classList.add('hidden'); }
 
   toast('Caricato.');
 }catch(e){ panic('load',e); } }, false);
@@ -1864,7 +1864,8 @@ function updateDpsPanel(){
       el.style.background = 'conic-gradient(#0008 '+deg+'deg, #0000 '+deg+'deg)';
       requestAnimationFrame(raf);
     } else {
-      document.getElementById('slot1')?.classList.remove('cooldown');
+      var _s1 = document.getElementById('slot1');
+if (_s1 && _s1.classList) _s1.classList.remove('cooldown');
       el.style.background = 'conic-gradient(#0000 0deg, #0008 0deg)';
       cdEnd=0;
     }
@@ -1887,9 +1888,8 @@ function updateDpsPanel(){
       }, 40);
     }
 
-    slot1?.addEventListener('click', tryStartAfterUse, true);
-    fab?.addEventListener('click', tryStartAfterUse, true);
-    fab?.addEventListener('touchend', tryStartAfterUse, {passive:true});
+    if (slot1) slot1.addEventListener('click', tryStartAfterUse, true);
+    if (fab) fab.addEventListener('touchend', tryStartAfterUse, {passive:true});
 
     // Safety all'avvio
     document.getElementById('slot1')?.classList.remove('cooldown');
@@ -2004,10 +2004,11 @@ function updateDpsPanel(){
     // Due frame per sicurezza, poi index & richiudi & cast
     requestAnimationFrame(()=>requestAnimationFrame(()=>{
       indexAbilities();
-      if(wasHidden) abClose?.click();
+      if(wasHidden) 
+      if (abClose) abClose.click();
       document.body.classList.remove('casting-now');
       // Ora clicchiamo il clone
-      setTimeout(()=>{ abMap[abId]?.click(); }, 0);
+      setTimeout(()=>{ if (abMap[abId]) abMap[abId].click(); }, 0);
     }));
   }
 
