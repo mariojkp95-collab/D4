@@ -737,9 +737,9 @@ function tileFree(x,y){
     const m = canvasToTile(ev);
     
     // Click HUD in-canvas
-if(inRect(m.sx, m.sy, HUD.loot)) { openLootIfOnBag(); return; }
-if(inRect(m.sx, m.sy, HUD.pot))  { usePotion(); return; }
-if(inRect(m.sx, m.sy, HUD.loot)) { btnLoot.click(); return; }
+if (inRect(m.sx, m.sy, HUD.atk))  { tryAttackAdjacent(); return; }
+if (inRect(m.sx, m.sy, HUD.pot))  { usePotion(); return; }
+if (inRect(m.sx, m.sy, HUD.loot)) { openLootIfOnBag(); return; }
 
     
     const now = performance.now();
@@ -946,8 +946,7 @@ cv.addEventListener('click', onCanvasTap, false);
       return false;
     }
 
-    
-// ===== LOOT & ITEMS =====
+    // ===== LOOT & ITEMS =====
 var BAG_TTL_MS = 90000, BAG_WARN_MS = 10000;
 
 function trySpawnLootBag(x,y,kind){
@@ -981,6 +980,7 @@ function makeWeapon(name,icon,rarity,atkBonus){ return { id:nextItemId++, name, 
 function makeArmor (name,icon,rarity,hpBonus){  return { id:nextItemId++, name, icon, rarity, type:'armor',  slot:'armor',  hpBonus: hpBonus||0 }; }
 
 function getBagAt(x,y){ for(var i=0;i<lootBags.length;i++){ var b=lootBags[i]; if(b.x===x&&b.y===y) return b; } return null; }
+function rarityClass(r){ if(r==='legend')return'r-legend'; if(r==='rare')return'r-rare'; if(r==='uncommon')return'r-uncommon'; return'r-com'; }
 
 function renderLoot(bag){
   lootBody.innerHTML='';
@@ -998,7 +998,6 @@ function renderLoot(bag){
   lootTakeAll.disabled = items.length===0;
   if(items.length===0) lootBody.innerHTML='<div style="grid-column:1/-1;text-align:center;color:#9aa3b2">Vuoto</div>';
 }
-function rarityClass(r){ if(r==='legend')return'r-legend'; if(r==='rare')return'r-rare'; if(r==='uncommon')return'r-uncommon'; return'r-com'; }
 
 function takeItem(bag,itemId){
   for(var i=0;i<bag.items.length;i++){
@@ -1014,7 +1013,7 @@ function takeItem(bag,itemId){
   draw(); drawMini(); updateHotbarCounts();
 }
 
-// --- Loot: apertura programmatica, indipendente dal bottone nascosto
+// --- Apertura programmatica del loot (indipendente dal bottone nascosto)
 function openLootIfOnBag(){
   var bag = getBagAt(player.x, player.y);
   if(!bag){ btnLoot.style.display='none'; return; }
@@ -1025,7 +1024,7 @@ function openLootIfOnBag(){
     return;
   }
 
-  // Se contiene solo comuni → autopick
+  // Solo comuni? → autopick
   var commonOnly = true;
   for (var i=0;i<bag.items.length;i++){
     var t = bag.items[i].type;
@@ -1056,47 +1055,14 @@ function openLootIfOnBag(){
 // Bottone “👜”
 btnLoot.addEventListener('click', openLootIfOnBag, false);
 
-  var key = bagKey(bag);
-  // se l’utente ha appena chiuso, non riapri in auto
-  if(lootSuppress.id===key && performance.now()<lootSuppress.until){
-    btnLoot.style.display='block';
-    return;
-  }
-
-  // se contiene solo comuni → auto-raccolta
-  var commonOnly=true;
-  for(var i=0;i<bag.items.length;i++){
-    var t=bag.items[i].type;
-    if(t!=='coin' && t!=='potion'){ commonOnly=false; break; }
-  }
-  if(commonOnly){
-    var beforeCoins=player.coins, beforePots=player.pots;
-    var emptied=autoPickupCommons(bag);
-    var coinsGained=player.coins-beforeCoins, potsGained=player.pots-beforePots;
-
-    if(emptied){ lootBags.splice(lootBags.indexOf(bag),1); btnLoot.style.display='none'; }
-    else{ renderLoot(bag); lootWin.classList.remove('hidden'); }
-
-    updateHotbarCounts(); draw(); drawMini();
-    if(coinsGained||potsGained){
-      toast('Raccolto: '+(coinsGained?('🪙 x'+coinsGained+' '):'')+(potsGained?('🍵 x'+potsGained):''));
-      if(coinsGained) logLoot('Monete +'+coinsGained);
-      if(potsGained)  logLoot('Pozioni +'+potsGained);
-    }
-    return;
-  }
-
-  // altrimenti apri finestra
-  renderLoot(bag);
-  lootWin.classList.remove('hidden');
-}, false);
-
+// Chiudi finestra loot → sopprimi riapertura per 2s
 lootClose.addEventListener('click', function(){
   var bag=getBagAt(player.x,player.y);
   if(bag){ lootSuppress={ id:bagKey(bag), until:performance.now()+2000 }; }
   lootWin.classList.add('hidden');
 }, false);
 
+// Prendi tutto
 lootTakeAll.addEventListener('click', function(){
   var bag=getBagAt(player.x,player.y);
   if(!bag) return;
@@ -1120,130 +1086,7 @@ function autoPickupCommons(bag){
   bag.items=keep;
   return bag.items.length===0;
 }
-
-
-    function applyItem(it){
-  if(it.type==='coin'){
-    player.coins += it.qty;
-    questAdd('coin', it.qty);
-    logLoot('Monete +' + it.qty);
-  } else if(it.type==='potion'){
-    player.pots += it.qty;
-    updateHotbarCounts();
-    logLoot('Pozioni +' + it.qty);
-  } else {
-    inventoryStackOrPush(it);
-    renderInventoryIfOpen();
-    toast('Ottenuto: ' + it.name + (it.qty?(' x'+it.qty):''));
-    logLoot('Ottenuto: ' + it.name);
-  }
-}
-    function inventoryStackOrPush(it){
-      if(typeof it.qty==='number'){
-        for(var i=0;i<inventory.length;i++){ var x=inventory[i]; if(x.type===it.type && x.name===it.name && typeof x.qty==='number'){ x.qty+=it.qty; return; } }
-      }
-      inventory.push(it);
-    }
-    function renderInventoryIfOpen(){ if(!invWin.classList.contains('hidden')) { renderTabs(); renderInventory(); } }
-    function renderTabs(){
-      invTabs.innerHTML='';
-      INV_TABS.forEach(function(t){
-        var b=document.createElement('button'); b.className='tab'+(currentTab===t?' active':''); b.textContent=t;
-        b.onclick=function(){ currentTab=t; renderInventory(); };
-        invTabs.appendChild(b);
-      });
-    }
-    function typeToTab(t){
-      if(t==='weapon') return 'Armi';
-      if(t==='armor') return 'Armature';
-      if(t==='potion' || t==='consumable') return 'Consumabili';
-      if(t==='material') return 'Materiali';
-      return 'Tutto';
-    }
-    function renderInventory(){
-      eqWeaponName.textContent = equipped.weapon ? (equipped.weapon.icon+' '+equipped.weapon.name+' (+'+ (equipped.weapon.atkBonus||0) +' ATK)') : '—';
-      eqArmorName.textContent  = equipped.armor  ? (equipped.armor.icon +' '+equipped.armor.name +' (+'+ (equipped.armor.hpBonus||0) +' HP)') : '—';
-
-      btnUnequipWeapon.disabled = !equipped.weapon;
-      btnUnequipArmor.disabled  = !equipped.armor;
-
-      invGrid.innerHTML='';
-      var items = inventory.filter(function(it){
-        if(currentTab==='Tutto') return true;
-        return typeToTab(it.type)===currentTab;
-      });
-
-      if(items.length===0){ invGrid.innerHTML='<div style="grid-column:1/-1;text-align:center;color:#9aa3b2">Nessun oggetto</div>'; return; }
-
-      for(var i=0;i<items.length;i++){
-        (function(it){
-          var d=document.createElement('div'); d.className='invItem '+rarityClass(it.rarity);
-          var qty = (typeof it.qty==='number' ? (' ×'+it.qty) : '');
-          d.innerHTML = '<div class="cap">'+(it.icon||'')+' '+it.name+qty+'</div>';
-
-          var row=document.createElement('div'); row.className='row';
-
-          // Equip/Usa
-          if(it.type==='weapon'){
-            var b1=document.createElement('button'); b1.className='act'; b1.textContent='Equippa 🗡️ (+'+(it.atkBonus||0)+' ATK)';
-            b1.onclick=function(){ equip(it,'weapon'); removeFromInventoryById(it.id); renderInventory(); toast('Equipaggiata: '+it.name); logSys('Equip: '+it.name); };
-            row.appendChild(b1);
-          } else if(it.type==='armor'){
-            var b2=document.createElement('button'); b2.className='act'; b2.textContent='Equippa 🛡️ (+'+(it.hpBonus||0)+' HP)';
-            b2.onclick=function(){ equip(it,'armor'); removeFromInventoryById(it.id); renderInventory(); toast('Equipaggiata: '+it.name); logSys('Equip: '+it.name); };
-            row.appendChild(b2);
-          } else if(it.type==='potion' || it.type==='consumable'){
-            var b3=document.createElement('button'); b3.className='act'; b3.textContent='Usa';
-            b3.onclick=function(){
-              if(it.heal){ var before=player.hp; player.hp=Math.min(player.maxHp, player.hp+it.heal); var healed=player.hp-before; if(healed>0){ logHeal('Consumabile: +'+healed+' HP.'); flashScreen('#8b5cf6'); draw(); } }
-              if(typeof it.qty==='number'){ it.qty--; if(it.qty<=0) removeFromInventoryById(it.id); renderInventory(); }
-            };
-            row.appendChild(b3);
-          }
-
-          // Assegna a barra
-          if(it.type==='potion' || it.type==='consumable'){
-            var b4=document.createElement('button'); b4.className='act'; b4.textContent='→ Barra';
-            b4.onclick=function(){ openSlotPicker(function(slot){ assignToHotbar(slot, it); }); };
-            row.appendChild(b4);
-          }
-
-          d.appendChild(row);
-          invGrid.appendChild(d);
-        })(items[i]);
-      }
-    }
-    function removeFromInventoryById(id){
-      for(var i=0;i<inventory.length;i++){ if(inventory[i].id===id){ inventory.splice(i,1); return; } }
-    }
-    function removeFromInventory(index){ if(index>=0 && index<inventory.length) inventory.splice(index,1); }
-    function equip(item, slot){
-      if(slot==='weapon' && equipped.weapon) inventory.push(equipped.weapon);
-      if(slot==='armor'  && equipped.armor ) inventory.push(equipped.armor);
-      equipped[slot]=item; recomputeStats(false); draw();
-    }
-    function unequip(slot){
-      if(!equipped[slot]) return;
-      inventory.push(equipped[slot]); equipped[slot]=null; recomputeStats(false); renderInventory(); draw(); toast('Rimosso equip.');
-    }
-
-    // Slot picker & hotbar assign
-    function openSlotPicker(cb){
-      slotPicker.classList.remove('hidden');
-      var btns=slotPicker.querySelectorAll('.pickBtn');
-      function onPick(ev){
-        var s=+ev.currentTarget.getAttribute('data-slot');
-        for(var i=0;i<btns.length;i++) btns[i].removeEventListener('click', onPick);
-        slotPicker.classList.add('hidden');
-        cb(s);
-      }
-      for(var i=0;i<btns.length;i++) btns[i].addEventListener('click', onPick, false);
-    }
-    function assignToHotbar(slot, it){
-      hotbar[slot]={kind:'item', icon:it.icon||'❖', itemId:it.id, type:it.type};
-      capEls[slot].textContent = it.icon||'❖';
-      toast(it.name+' assegnato allo slot '+slot);
-    }
+// ===== FINE LOOT =====
 
     // ===== ABILITÀ =====
     function renderAbilities(){
