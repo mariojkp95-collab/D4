@@ -388,6 +388,41 @@ document.addEventListener('DOMContentLoaded', wireDeathOverlay, false);
   }
 
   try{
+  
+  // === PATCH-SMOOTH: core tween & render ===
+var MOVE_MS = 110; // durata animazione di 1 casella (ms), < 120 tick = smooth
+
+function startTween(o, fx, fy, tx, ty, now){
+  o.vFromX = fx; o.vFromY = fy; o.vToX = tx; o.vToY = ty;
+  o.vStart = now; o.vEnd = now + MOVE_MS;
+  if (o.vx == null) o.vx = fx;
+  if (o.vy == null) o.vy = fy;
+}
+
+function tweenUpdate(o, now){
+  if(!o) return;
+  var has = (o.vStart && o.vEnd && o.vEnd > o.vStart);
+  if(has && now < o.vEnd){
+    var t = (now - o.vStart) / (o.vEnd - o.vStart);
+    // smoothstep
+    t = t*t*(3 - 2*t);
+    o.vx = o.vFromX + (o.vToX - o.vFromX) * t;
+    o.vy = o.vFromY + (o.vToY - o.vFromY) * t;
+  } else {
+    // a riposo: stai esattamente sulla cella logica
+    if (o.x != null) o.vx = o.x;
+    if (o.y != null) o.vy = o.y;
+    o.vStart = 0; o.vEnd = 0;
+  }
+}
+
+function updateTweens(){
+  var now = performance.now();
+  tweenUpdate(player, now);
+  for (var i=0;i<enemies.length;i++) tweenUpdate(enemies[i], now);
+  for (var j=0;j<projectiles.length;j++) tweenUpdate(projectiles[j], now);
+}
+  
     // ===== Dati runtime =====
     var lootBags=[]; var nextItemId=1;
     var dead = false;
@@ -436,30 +471,37 @@ cv.height = ROWS * TILE;
     };
     recomputeStats(true);
     
+    // === PATCH-SMOOTH: init visual coords
+player.vx = player.x; 
+player.vy = player.y;
+    
     // Traccia l'ultima posizione del player per l'edge-trigger dei portali
 var lastPlayerX = player.x, lastPlayerY = player.y;
 
     function makeSlime(x,y){
-      return giveId({
-        kind:'slime', type:'melee', x:x, y:y, spawnX:x, spawnY:y,
-        hp:60,maxHp:60, atkMin:5,atkMax:9,
-        hitCd:800,lastHit:0,
-        aggro:false, aggroRange:5, leashRange:15, loseAggroMs:6000, lastSeenTs:0,
-        moveTick:0, moveEvery:6, path:[], mode:'idle'
-      });
-      
-    }
-    
-    
-    function makeArcher(x,y){
-      return giveId({
-        kind:'archer', type:'ranged', x:x, y:y, spawnX:x, spawnY:y,
-        hp:40,maxHp:40, atkCd:1200,lastShot:0, rangeMin:3, rangeMax:7,
-        pokeCd:700,lastPoke:0,
-        aggro:false, aggroRange:7, leashRange:15, loseAggroMs:6000, lastSeenTs:0,
-        moveTick:0, moveEvery:6, path:[], mode:'idle'
-      });
-    }
+  var e = {
+    kind:'slime', type:'melee', x:x, y:y, spawnX:x, spawnY:y,
+    hp:60,maxHp:60, atkMin:5,atkMax:9,
+    hitCd:800,lastHit:0,
+    aggro:false, aggroRange:5, leashRange:15, loseAggroMs:6000, lastSeenTs:0,
+    moveTick:0, moveEvery:6, path:[], mode:'idle'
+  };
+  e.vx = x; e.vy = y;
+  return giveId(e);
+}
+
+function makeArcher(x,y){
+  var e = {
+    kind:'archer', type:'ranged', x:x, y:y, spawnX:x, spawnY:y,
+    hp:40,maxHp:40, atkCd:1200,lastShot:0, rangeMin:3, rangeMax:7,
+    pokeCd:700,lastPoke:0,
+    aggro:false, aggroRange:7, leashRange:15, loseAggroMs:6000, lastSeenTs:0,
+    moveTick:0, moveEvery:6, path:[], mode:'idle'
+  };
+  e.vx = x; e.vy = y;
+  return giveId(e);
+}
+
     var enemies=[ makeSlime(COLS-2,ROWS-2), makeArcher(COLS-4,2) ];
     
 // === WORLD / MAP MANAGER (non distruttivo) ===
@@ -585,6 +627,10 @@ function checkPortalAndTeleport(justEntered){
   // Scegli uscita sicura vicino al portale di destinazione
   var exit = findSafeExit(hit.to, hit.tx, hit.ty);
   player.x = exit.x; player.y = exit.y;
+  
+  // === PATCH-SMOOTH: reset vis pos dopo TP
+player.vx = player.x; 
+player.vy = player.y;
 
   // Ripulisci/spawna in base al mondo
   if (WORLD.current === 'spawn'){
@@ -1325,14 +1371,20 @@ function autoPickupCommons(bag){
       }
     }
 
-    // === Movimento su path ===
-    if(pathQueue.length && !isCasting){
-      var next=pathQueue.shift();
-      var blocked=false, i;
-      if(!walkable(next.x,next.y)) blocked=true;
-      for(i=0;i<enemies.length;i++){ if(enemies[i].x===next.x&&enemies[i].y===next.y){ blocked=true; break; } }
-      if(!blocked){ player.x=next.x; player.y=next.y; } else pathQueue=[];
-    }
+    // === PATCH-SMOOTH: player step con tween
+if(pathQueue.length && !isCasting){
+  var next = pathQueue.shift();
+  var blocked=false, i;
+  if(!walkable(next.x,next.y)) blocked=true;
+  for(i=0;i<enemies.length;i++){ if(enemies[i].x===next.x&&enemies[i].y===next.y){ blocked=true; break; } }
+  if(!blocked){
+    var fx = player.x, fy = player.y;
+    player.x = next.x; player.y = next.y;
+    startTween(player, fx, fy, player.x, player.y, performance.now());
+  } else {
+    pathQueue=[];
+  }
+}
 
     // === Portali (edge-trigger: attiva solo se hai appena mosso) ===
 var justEntered = (player.x !== lastPlayerX || player.y !== lastPlayerY);
@@ -1382,21 +1434,17 @@ lastPlayerY = player.y;
               e.lastShot=now;
               var dx2=0,dy2=0;
               if(e.x===player.x) dy2=player.y>e.y?1:-1; else if(e.y===player.y) dx2=player.x>e.x?1:-1;
-              if(dx2||dy2) projectiles.push({x:e.x,y:e.y,dx:dx2,dy:dy2,spdTick:0,dmg:rndInt(6,10)});
+              if(dx2||dy2) projectiles.push({x:e.x,y:e.y,dx:dx2,dy:dy2,spdTick:0,dmg:rndInt(6,10), vx:e.x, vy:e.y, vStart:0, vEnd:0});
             }
             if(distM<e.rangeMin && canMove){
-              var backX=e.x + (player.x<e.x?1:(player.x>e.x?-1:0));
-              var backY=e.y + (player.y<e.y?1:(player.y>e.y?-1:0));
-              if(walkable(backX,backY) && !(backX===player.x&&backY===player.y)){ e.x=backX; e.y=backY; }
-            }
-          } else {
-            if(canMove){
-              if(distM>e.rangeMax || !hasLoS(e.x,e.y,player.x,player.y)){
-                e.path = bfs(e.x,e.y,player.x,player.y) || e.path || [];
-                tryStepAlongPath(e);
-              }
-            }
-          }
+  var backX=e.x + (player.x<e.x?1:(player.x>e.x?-1:0));
+  var backY=e.y + (player.y<e.y?1:(player.y>e.y?-1:0));
+  if(walkable(backX,backY) && !(backX===player.x&&backY===player.y)){
+    var fx=e.x, fy=e.y;
+    e.x=backX; e.y=backY;
+    startTween(e, fx, fy, e.x, e.y, performance.now());
+  }
+}
           var adj = (Math.max(Math.abs(e.x-player.x),Math.abs(e.y-player.y))===1);
           if(adj && (now-e.lastPoke)>=e.pokeCd && !isCasting){
             e.lastPoke=now;
@@ -1431,7 +1479,9 @@ lastPlayerY = player.y;
         projectiles.splice(pi,1);
         continue;
       }
-      pr.x=nx; pr.y=ny;
+      
+      startTween(pr, pr.x, pr.y, nx, ny, performance.now());
+pr.x=nx; pr.y=ny;
     }
 
     // === Pickup magnet (monete/pozioni loose) ===
@@ -1451,18 +1501,28 @@ lastPlayerY = player.y;
 }
     
   function tryStepAlongPath(e){
-      if(!e.path || !e.path.length) return;
-      var nxt=e.path.shift();
-      if(!walkable(nxt.x,nxt.y)) { e.path=[]; return; }
-      for(var k=0;k<enemies.length;k++){ var other=enemies[k]; if(other!==e && other.x===nxt.x && other.y===nxt.y) { e.path=[]; return; } }
-      if(nxt.x===player.x && nxt.y===player.y){ e.path=[]; return; }
-      e.x=nxt.x; e.y=nxt.y;
-    }
+  if(!e.path || !e.path.length) return;
+  var nxt=e.path.shift();
+  if(!walkable(nxt.x,nxt.y)) { e.path=[]; return; }
+  for(var k=0;k<enemies.length;k++){ var other=enemies[k]; if(other!==e && other.x===nxt.x && other.y===nxt.y) { e.path=[]; return; } }
+  if(nxt.x===player.x && nxt.y===player.y){ e.path=[]; return; }
+  var fx=e.x, fy=e.y;
+  e.x=nxt.x; e.y=nxt.y;
+  startTween(e, fx, fy, e.x, e.y, performance.now());
+}
 
     layoutHud(); // 
 
 setInterval(step,120);
 draw(); drawAtkCooldown(); drawMini(); updateHotbarCounts(); updateTargetFrame(); updateDpsPanel(); renderAbilities();
+
+// === PATCH-SMOOTH: render loop 60fps con tween
+(function animLoop(){
+  updateTweens();
+  draw();
+  drawAtkCooldown(); // ring del cooldown più fluido
+  requestAnimationFrame(animLoop);
+})();
 
     // DRAW
     function draw(){
@@ -1498,14 +1558,17 @@ draw(); drawAtkCooldown(); drawMini(); updateHotbarCounts(); updateTargetFrame()
 
       for(var eI=0;eI<enemies.length;eI++){ var en=enemies[eI];
         var col = (en.type==='ranged') ? '#a855f7' : getVar('--enemy');
-        drawActor(en.x,en.y,col);
-        drawHpBar(en.x,en.y,en.hp,en.maxHp,true, (target===en));
-        if(target===en){ drawTargetRing(en.x,en.y); }
-      }
-      drawActor(player.x,player.y,getVar('--player'));
-      drawHpBar(player.x,player.y,player.hp,player.maxHp,false,false);
+var ex = (en.vx!=null?en.vx:en.x), ey=(en.vy!=null?en.vy:en.y);
+drawActor(ex,ey,col);
+drawHpBar(ex,ey,en.hp,en.maxHp,true, (target===en));
+if(target===en){ drawTargetRing(ex,ey); }
 
-      for(var pp=0; pp<projectiles.length; pp++){ var pr=projectiles[pp]; var px2=pr.x*TILE+TILE/2, py2=pr.y*TILE+TILE/2; ctx.fillStyle='#f87171'; ctx.beginPath(); ctx.arc(px2,py2,6,0,Math.PI*2); ctx.fill(); }
+      var pxv = (player.vx!=null?player.vx:player.x), pyv=(player.vy!=null?player.vy:player.y);
+drawActor(pxv,pyv,getVar('--player'));
+drawHpBar(pxv,pyv,player.hp,player.maxHp,false,false);
+
+      for(var pp=0; pp<projectiles.length; pp++){ var pr=projectiles[pp]; var ptx = (pr.vx!=null?pr.vx:pr.x), pty=(pr.vy!=null?pr.vy:pr.y);
+var px2=ptx*TILE+TILE/2, py2=pty*TILE+TILE/2; ctx.fillStyle='#f87171'; ctx.beginPath(); ctx.arc(px2,py2,6,0,Math.PI*2); ctx.fill(); }
 
       drawDmgTexts();
       drawXpBar();
@@ -1543,25 +1606,27 @@ function roundRect(ctx, x, y, w, h, r){
     }
 
     function drawActor(tx,ty,color){
-      var x=tx*TILE, y=ty*TILE;
-      ctx.fillStyle=getVar('--shadow'); ctx.beginPath(); ctx.ellipse(x+TILE/2,y+TILE-12,18,6,0,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle=color; ctx.fillRect(x+TILE/2-16,y+TILE/2-22,32,36);
-    }
-    function drawHpBar(tx,ty,hp,maxHp,isEnemy,isTarget){
-      var x=tx*TILE, y=ty*TILE, w=40, h=6, px=x+TILE/2-w/2, py=y+TILE/2-32;
-      var r=Math.max(0,Math.min(1,hp/maxHp));
-      var col='#10b981'; if(isEnemy){ if(r<0.66) col='#f59e0b'; if(r<0.33) col='#ef4444'; }
-      ctx.fillStyle=getVar('--hpBack'); ctx.fillRect(px,py,w,h);
-      ctx.fillStyle=col; ctx.fillRect(px,py,w*r,h);
-      ctx.strokeStyle=isTarget ? '#f87171' : '#0008';
-      ctx.lineWidth=isTarget ? 2 : 1;
-      ctx.strokeRect(px,py,w,h);
-      ctx.lineWidth=1;
-    }
-    function drawTargetRing(tx,ty){
-      var x=tx*TILE+TILE/2, y=ty*TILE+TILE/2;
-      ctx.save(); ctx.strokeStyle='#ef4444'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(x,y,28,0,Math.PI*2); ctx.stroke(); ctx.restore();
-    }
+  var x=tx*TILE, y=ty*TILE;
+  ctx.fillStyle=getVar('--shadow'); ctx.beginPath(); ctx.ellipse(x+TILE/2,y+TILE-12,18,6,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=color; ctx.fillRect(x+TILE/2-16,y+TILE/2-22,32,36);
+}
+
+function drawHpBar(tx,ty,hp,maxHp,isEnemy,isTarget){
+  var x=tx*TILE, y=ty*TILE, w=40, h=6, px=x+TILE/2-w/2, py=y+TILE/2-32;
+  var r=Math.max(0,Math.min(1,hp/maxHp));
+  var col='#10b981'; if(isEnemy){ if(r<0.66) col='#f59e0b'; if(r<0.33) col='#ef4444'; }
+  ctx.fillStyle=getVar('--hpBack'); ctx.fillRect(px,py,w,h);
+  ctx.fillStyle=col; ctx.fillRect(px,py,w*r,h);
+  ctx.strokeStyle=isTarget ? '#f87171' : '#0008';
+  ctx.lineWidth=isTarget ? 2 : 1;
+  ctx.strokeRect(px,py,w,h);
+  ctx.lineWidth=1;
+}
+
+function drawTargetRing(tx,ty){
+  var x=tx*TILE+TILE/2, y=ty*TILE+TILE/2;
+  ctx.save(); ctx.strokeStyle='#ef4444'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(x,y,28,0,Math.PI*2); ctx.stroke(); ctx.restore();
+}
     function drawXpBar(){
       var pad=6, h=10, x=pad, y=pad, w=cv.width-pad*2, need=(player.lvl<MAX_LVL?xpNeeded(player.lvl):1), ratio=(player.lvl<MAX_LVL?Math.max(0,Math.min(1,player.exp/need)):1);
       ctx.fillStyle='rgba(11,18,36,.66)'; ctx.fillRect(x,y,w,h);
