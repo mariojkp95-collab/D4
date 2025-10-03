@@ -1562,6 +1562,7 @@ var ex = (en.vx!=null?en.vx:en.x), ey=(en.vy!=null?en.vy:en.y);
 drawActor(ex,ey,col);
 drawHpBar(ex,ey,en.hp,en.maxHp,true, (target===en));
 if(target===en){ drawTargetRing(ex,ey); }
+}
 
       var pxv = (player.vx!=null?player.vx:player.x), pyv=(player.vy!=null?player.vy:player.y);
 drawActor(pxv,pyv,getVar('--player'));
@@ -1670,7 +1671,7 @@ function drawTargetRing(tx,ty){
     function updateHotbarCounts(){ potCntEl.textContent = String(player.pots||0); }
     function toast(msg){ statusEl.textContent='['+BUILD+'] '+msg; }
 
-    // ===== Target Frame & DPS UI =====
+   Target Frame & DPS UI =====
     function capFirst(s){ return s ? s.charAt(0).toUpperCase()+s.slice(1) : ''; }
     function nameOf(t){ return t && (t.kind ? capFirst(t.kind) : (t.type==='ranged'?'Arciere':'Mostro')); }
     function updateTargetFrame(){
