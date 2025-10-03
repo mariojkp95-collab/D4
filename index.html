@@ -1775,46 +1775,29 @@ function drawTargetRing(tx,ty){
     function updateHotbarCounts(){ potCntEl.textContent = String(player.pots||0); }
     function toast(msg){ statusEl.textContent='['+BUILD+'] '+msg; }
 
-// ===== Target Frame & DPS UI =====
-function capFirst(s){
-  return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
-}
-
-function nameOf(t){
-  return t && (t.kind ? capFirst(t.kind) : (t.type === 'ranged' ? 'Arciere' : 'Mostro'));
-}
+   // ===== Target Frame & DPS UI =====
+function capFirst(s){ return s ? s.charAt(0).toUpperCase()+s.slice(1) : ''; }
+function nameOf(t){ return t && (t.kind ? capFirst(t.kind) : (t.type==='ranged'?'Arciere':'Mostro')); }
 
 function updateTargetFrame(){
-  if (!target || enemies.indexOf(target) === -1){
-    hideTargetFrame();
-    return;
-  }
-  tframe.style.display = 'block';
-  tfName.textContent   = nameOf(target) || 'Nemico';
-  tfKind.textContent   = (target.type === 'ranged' ? 'Ranged' : 'Melee');
-
-  var dist = Math.max(Math.abs(player.x - target.x), Math.abs(player.y - target.y));
-  tfDist.textContent = dist + ' tiles';
-
-  var ratio = Math.max(0, Math.min(1, target.hp / target.maxHp));
-  tfHpBar.style.width      = (ratio * 100) + '%';
-  tfHpBar.style.background = ratio < 0.33 ? '#ef4444' : (ratio < 0.66 ? '#f59e0b' : '#10b981');
-  tfHpTxt.textContent      = 'HP ' + target.hp + ' / ' + target.maxHp + ' (' + Math.round(ratio * 100) + '%)';
+  if(!target || enemies.indexOf(target)===-1){ hideTargetFrame(); return; }
+  tframe.style.display='block';
+  tfName.textContent = nameOf(target) || 'Nemico';
+  tfKind.textContent = (target.type==='ranged'?'Ranged':'Melee');
+  var dist = Math.max(Math.abs(player.x-target.x), Math.abs(player.y-target.y));
+  tfDist.textContent = dist+' tiles';
+  var ratio = Math.max(0, Math.min(1, target.hp/target.maxHp));
+  tfHpBar.style.width = (ratio*100)+'%';
+  tfHpBar.style.background = ratio<0.33 ? '#ef4444' : (ratio<0.66 ? '#f59e0b' : '#10b981');
+  tfHpTxt.textContent = 'HP '+target.hp+' / '+target.maxHp+' ('+Math.round(ratio*100)+'%)';
 }
 
-function hideTargetFrame(){
-  tframe.style.display = 'none';
-}
+function hideTargetFrame(){ tframe.style.display='none'; }
 
 function updateDpsPanel(){
-  var now    = performance.now();
-  var cutoff = now - 10000; // ultimi 10s
-  var sum    = 0;
-  for (var i = 0; i < dpsEvents.length; i++){
-    if (dpsEvents[i].t >= cutoff) sum += dpsEvents[i].a;
-  }
-  var dps = Math.round(sum / 10);
-  if (dps > dpsPeak) dpsPeak = dps;
+  var now=performance.now(), cutoff=now-10000, sum=0;
+  for(var i=0;i<dpsEvents.length;i++) if(dpsEvents[i].t>=cutoff) sum+=dpsEvents[i].a;
+  var dps=Math.round(sum/10); if(dps>dpsPeak) dpsPeak=dps;
   dpsText.textContent = dps + ' (picco ' + dpsPeak + ')';
 }
 
